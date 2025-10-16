@@ -1,24 +1,30 @@
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{any::Any, borrow::Cow, collections::BTreeMap};
 
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, MetaMethod};
 
-use crate::{typed::{function::Return, generator::FunctionBuilder, Func, Field}, MaybeSend};
+use crate::{typed::{function::Return, generator::FunctionBuilder, Field, Func, Index, IntoDocComment, Type}, MaybeSend};
 
 use super::{Typed, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedMultiValue, TypedUserData};
 
 /// Type information for a lua `class`. This happens to be a [`TypedUserData`]
-#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct TypedClassBuilder {
     pub type_doc: Option<Cow<'static, str>>,
     queued_doc: Option<String>,
 
-    pub fields: BTreeMap<Cow<'static, str>, Field>,
-    pub static_fields: BTreeMap<Cow<'static, str>, Field>,
-    pub meta_fields: BTreeMap<Cow<'static, str>, Field>,
-    pub methods: BTreeMap<Cow<'static, str>, Func>,
-    pub meta_methods: BTreeMap<Cow<'static, str>, Func>,
-    pub functions: BTreeMap<Cow<'static, str>, Func>,
-    pub meta_functions: BTreeMap<Cow<'static, str>, Func>,
+    pub fields: BTreeMap<Index, Field>,
+    pub static_fields: BTreeMap<Index, Field>,
+    pub meta_fields: BTreeMap<Index, Field>,
+    pub methods: BTreeMap<Index, Func>,
+    pub meta_methods: BTreeMap<Index, Func>,
+    pub functions: BTreeMap<Index, Func>,
+    pub meta_functions: BTreeMap<Index, Func>,
+}
+
+impl From<TypedClassBuilder> for Type {
+    fn from(value: TypedClassBuilder) -> Self {
+        Type::Class(Box::new(value))
+    }
 }
 
 impl TypedClassBuilder {
@@ -28,6 +34,287 @@ impl TypedClassBuilder {
         T::add_fields(&mut gen);
         T::add_methods(&mut gen);
         gen
+    }
+
+    /// Check if any of there are any meta fields, functions, or methods present
+    pub fn is_meta_empty(&self) -> bool {
+        self.meta_fields.is_empty()
+            && self.meta_functions.is_empty()
+            && self.meta_methods.is_empty()
+    }
+
+    /// Creates a new typed field and adds it to the class's type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedClassBuilder::default()
+    ///     .field("data1", Type::string() | Type::nil(), "doc comment goes last")
+    ///     .field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
+    ///     .field("message", Type::string(), foramt!("A message for {NAME}"))
+    /// ```
+    pub fn field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
+        self.fields.insert(key.into(), Field::new(ty, doc));
+        self
+    }
+
+    /// Creates a new typed function and adds it to the class's type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     .function::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .function::<String, ()>("hello", ())
+    /// ```
+    pub fn function<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.functions.insert(key.into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`function`][TypedClassBuilder::function] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .function_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn function_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.functions.insert(key.into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed method and adds it to the class's type information.
+    ///
+    /// As with methods in lua, the `self` parameter is implicit and has the same type as the
+    /// parent class.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     .method::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method::<String, ()>("hello", ())
+    /// ```
+    pub fn method<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.methods.insert(key.into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`method`][TypedClassBuilder::method] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn method_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.methods.insert(key.into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed field and adds it to the class's meta type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedClassBuilder::default()
+    ///     .meta_field("data1", Type::string() | Type::nil(), "doc comment goes last")
+    ///     .meta_field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
+    ///     .meta_field("message", Type::string(), foramt!("A message for {NAME}"))
+    /// ```
+    pub fn meta_field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
+        self.meta_fields.insert(key.into(), Field::new(ty, doc));
+        self
+    }
+
+    /// Creates a new typed function and adds it to the class's meta type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     .meta_function::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_function::<String, ()>("hello", ())
+    /// ```
+    pub fn meta_function<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.meta_functions.insert(key.into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`meta_function`][TypedClassBuilder::meta_function] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_function_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn meta_function_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.meta_functions.insert(key.into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed method and adds it to the class's type information.
+    ///
+    /// As with methods in lua, the `self` parameter is implicit and has the same type as the
+    /// parent class.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedClassBuilder::default()
+    ///     .method::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method::<String, ()>("hello", ())
+    /// ```
+    pub fn meta_method<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.meta_methods.insert(key.into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`meta_method`][TypedClassBuilder::meta_method] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedClassBuilder, Type};
+    ///
+    /// TypedClassBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_method_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn meta_method_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.meta_methods.insert(key.into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
     }
 }
 
@@ -54,7 +341,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | V::ty();
@@ -73,7 +360,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty();
@@ -92,7 +379,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
@@ -113,7 +400,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty() | R::ty();
@@ -132,7 +419,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty();
@@ -151,7 +438,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
@@ -172,7 +459,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty() | R::ty();
@@ -190,7 +477,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_fields
-            .entry(name)
+            .entry(name.into())
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
@@ -217,7 +504,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -239,7 +526,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -257,7 +544,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -279,7 +566,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -297,7 +584,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -319,7 +606,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -336,7 +623,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_methods.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -357,7 +644,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_methods.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -378,7 +665,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -403,7 +690,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -424,7 +711,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
         
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -449,7 +736,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -467,7 +754,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -489,7 +776,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -506,7 +793,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_functions.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -527,7 +814,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -547,7 +834,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -571,7 +858,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -588,7 +875,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_methods.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -609,7 +896,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_methods.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -626,7 +913,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_functions.insert(
-            name,
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
@@ -647,7 +934,7 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_functions.insert(
-            name,
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,

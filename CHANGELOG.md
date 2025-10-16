@@ -1,5 +1,34 @@
 # CHANGELOG
 
+##### 0.0.7
+
+**Features**
+
+- Typed derive macro for structs now generates a class type with the `ty()` method and the class name with `as_param()` method
+- Add typed impls for `Arc`, `Rc`, `Cell`, `RefCell`, `Mutex`, and `PhantomData`
+
+**Fixes**
+
+- `register_as` now converts all types except for classes and enums to alias types
+
+##### 0.0.6
+
+**Features**
+
+- Add the `ExtendModule` trait to allow tables to be extended by the contents created from the `Module` trait
+- Add `Index` enum to handle to handle indexing types
+- Add `lua` lifetime to `add_*_function` and `add_*_method` methods to allow for lua type construction and return. i.e. tables, strings, etc.
+- Definition file generation handles table key escaping. i.e. `[0]` and `["key.name"]`
+- Rename `Type::Struct` to `Type::Table`
+- Add better `BitOr` support for anything that can be converted to a `Type`
+    - This allows for cool type building ex: `Type::nil() | "literal" | 3 | true | [Type::string(), Type::integer()]`
+- Simplify registering types with the definiton builder
+
+**Fixes**
+
+- Typed derive macro using wrong traits
+- Export missing traits and objects
+
 ##### 0.0.5
 
 **Features**

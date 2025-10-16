@@ -2,7 +2,7 @@
 extern crate quote;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{proc_macro_error, abort};
 use syn::spanned::Spanned;
 use venial::{parse_item, Fields, Item};
@@ -25,12 +25,12 @@ pub fn derive_user_data(input: TokenStream) -> TokenStream {
     quote!(
         impl mlua_extras::mlua::UserData for #name {
             fn add_fields<'lua, F: mlua_extras::mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
-                let mut wrapper = mlua_extras::typed::WrappedGenerator::new(fields);
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(fields);
                 <#name as mlua_extras::typed::TypedUserData>::add_fields(&mut wrapper);
             }
 
             fn add_methods<'lua, M: mlua_extras::mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-                let mut wrapper = mlua_extras::typed::WrappedGenerator::new(methods);
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(methods);
                 <#name as mlua_extras::typed::TypedUserData>::add_methods(&mut wrapper);
             }
         }
@@ -44,11 +44,19 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
     match parse_item(input.clone()) {
         Ok(Item::Struct(struct_type)) => {
             let name = struct_type.name.clone();
-            let value = syn::LitStr::new(name.to_string().as_str(), Span::call_site());
+            let label = name.to_string();
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::single(#value)
+                        mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>())
+                    }
+
+                    fn as_param() -> mlua_extras::typed::Param {
+                        mlua_extras::typed::Param {
+                            doc: None,
+                            name: None,
+                            ty: mlua_extras::typed::Type::named(#label),
+                        }
                     }
                 }
             )
@@ -59,7 +67,7 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                 .map(|(variant, _punc)| {
                     let name = format!("\"{}\"", variant.name);
                     match &variant.fields {
-                        Fields::Unit => quote!{ mlua_extras::typed::Type::single(#name) },
+                        Fields::Unit => quote!{ mlua_extras::typed::Type::Single(#name.into()) },
                         Fields::Tuple(tf) => {
                             let tuple_values = tf.fields.iter().map(|(field, _)| {
                                 let ty = field.ty.clone();
@@ -79,9 +87,9 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                             let tuple_values = named.fields.iter().map(|(field, _)| {
                                 let name = field.name.to_string();
                                 let ty = field.ty.clone();
-                                quote!{ (#name, <#ty as mlua_extras::typed::Typed>::ty()) }
+                                quote!{ (mlua_extras::typed::Index::from(#name), <#ty as mlua_extras::typed::Typed>::ty()) }
                             }).collect::<Vec<_>>();
-                            quote!{ mlua_extras::typed::Type::Struct(std::collections::HashMap::from([
+                            quote!{ mlua_extras::typed::Type::Table(std::collections::BTreeMap::from([
                                     #(#tuple_values,)*
                             ])) }
                         }
@@ -92,12 +100,10 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
 
             // TODO: This should be a union alias
             let name = enum_type.name.clone();
-            let value = name.to_string();
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
                         mlua_extras::typed::Type::r#enum(
-                            #value,
                             [ #(#variants,)* ]
                         )
                     }

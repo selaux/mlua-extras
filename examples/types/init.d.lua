@@ -1,6 +1,6 @@
 --- @meta
 
---- @alias SystemColor "Black"
+--- @alias System "Black"
 ---  | "Red"
 ---  | "Green"
 ---  | "Yellow"
@@ -9,34 +9,35 @@
 ---  | "Magenta"
 ---  | "White"
 
---- @alias Color SystemColor
+--- @alias Color System
 ---  | integer
----  | { [1]: integer, [2]: integer, [3]: integer }
+---  | [integer, integer, integer]
 
 --- This is a doc comment section for the overall type
 --- @class Example
 --- Example complex type
 --- @field color Color
-local _Class_Example = {
+local _CLASS_Example_ = {
+  --- Log a specific format with any lua types
+  --- @param format string String to pass to the formatter.
+  --- @param ... any Arguments to pass to the formatter.
+  LogAny = function(format, ...) end,
   --- print all items
-  --- @param ... string
-  printAll = function(...) end,
+  --- @param param0 any 
+  printAll = function(param0) end,
   __metatable = {
     --- @param self Example
-    --- @return string
+    --- @return string 
     __tostring = function(self) end,
   }
 }
 
---- Example module
 --- @type Example
 example = nil
 
---- Greet the name that was passed in
---- @param param0 string
+--- @param param0 string 
 function greet(param0) end
 
---- Print a color and it's value
---- @param param0 Color
+--- @param param0 Color 
 function printColor(param0) end
 

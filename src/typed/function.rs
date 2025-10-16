@@ -4,44 +4,56 @@ use mlua::{FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, Value};
 
 use crate::MaybeSend;
 
-use super::{Type, Typed, TypedMultiValue};
+use super::{IntoDocComment, Type, Typed, TypedMultiValue};
 
 /// A function parameter type representation
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Param {
     pub doc: Option<Cow<'static, str>>,
     ///If the parameter has a name (will default to Param{number} if None)
     pub name: Option<Cow<'static, str>>,
     ///The type of the parameter
-    pub(crate) ty: Type,
+    pub ty: Type,
 }
 
 impl Param {
     /// Set the parameters name
-    pub fn set_name(&mut self, name: impl Into<Cow<'static, str>>) -> &mut Self {
+    pub fn name(&mut self, name: impl Into<Cow<'static, str>>) -> &mut Self {
         self.name = Some(name.into());
         self
     }
 
     /// Set the parameters doc comment
-    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
-        self.doc = Some(doc.into());
+    pub fn doc(&mut self, doc: impl IntoDocComment) -> &mut Self {
+        self.doc = doc.into_doc_comment();
+        self
+    }
+
+    /// Set the parameters type manually
+    pub fn ty(&mut self, ty: Type) -> &mut Self {
+        self.ty = ty;
         self
     }
 }
 
 /// A function parameter type representation
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Return {
     pub doc: Option<Cow<'static, str>>,
     ///The type of the return
-    pub(crate) ty: Type,
+    pub ty: Type,
 }
 
 impl Return {
     /// Set the parameters doc comment
-    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
-        self.doc = Some(doc.into());
+    pub fn doc(&mut self, doc: impl IntoDocComment) -> &mut Self {
+        self.doc = doc.into_doc_comment();
+        self
+    }
+
+    /// Set the parameters doc comment
+    pub fn ty(&mut self, ty: Type) -> &mut Self {
+        self.ty = ty;
         self
     }
 }
@@ -228,7 +240,10 @@ where
     fn ty() -> Type {
         Type::Function {
             params: Params::get_types_as_params(),
-            returns: Response::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+            returns: Response::get_types()
+                .into_iter()
+                .map(|ty| Return { doc: None, ty })
+                .collect(),
         }
     }
 }

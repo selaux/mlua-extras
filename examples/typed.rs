@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use mlua_extras::{
-    mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, UserDataMethods, Value, Variadic},
+    mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, Value, Variadic},
     typed::{
         generator::{Definition, Definitions, DefinitionFileGenerator},
         TypedDataFields, TypedDataMethods, TypedUserData,
@@ -120,16 +120,33 @@ impl TypedUserData for Example {
     }
 
     fn add_methods<'lua, T: TypedDataMethods<'lua, Self>>(methods: &mut T) {
-        methods.document("print all items").add_function(
-            "printAll",
-            |_lua, all: Variadic<String>| {
-                println!(
-                    "{}",
-                    all.iter().map(|v| v.as_str()).collect::<Vec<_>>().join(" ")
-                );
-                Ok(())
-            },
-        );
+        methods
+            .document("print all items")
+            .add_function(
+                "printAll",
+                |_lua, all: Variadic<String>| {
+                    println!(
+                        "{}",
+                        all.iter().map(|v| v.as_str()).collect::<Vec<_>>().join(" ")
+                    );
+                    Ok(())
+                },
+            );
+
+        methods
+            .document("Log a specific format with any lua types")
+            .add_function_with("LogAny", |_, _args: (String, Variadic<Value>)| { Ok(()) }, |func| {
+                func.param(0, |param| {
+                    param
+                        .name("format")
+                        .doc("String to pass to the formatter.");
+                });
+                func.param(1, |param| {
+                    param
+                        .name("...")
+                        .doc("Arguments to pass to the formatter.");
+                });
+            });
 
         methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| {
             Ok(format!("{this:?}"))
@@ -158,12 +175,12 @@ fn main() -> mlua::Result<()> {
 
     let definitions = Definitions::start()
         .define("init", Definition::start()
-            .register_enum::<SystemColor>()?
-            .register_enum::<Color>()?
-            .register_class::<Example>()
-            .value::<Example, _>("example")
-            .function::<String, (), _>("greet", ())
-            .function::<Color, (), _>("printColor", ())
+            .register::<SystemColor>("System")
+            .register::<Color>("Color")
+            .register::<Example>("Example")
+            .value::<Example>("example")
+            .function::<String, ()>("greet", ())
+            .function::<Color, ()>("printColor", ())
         )
         .finish();
 

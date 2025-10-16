@@ -5,19 +5,18 @@ mod class;
 mod module;
 
 pub use class::{
-    TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedUserData, WrappedBuilder,
+    TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedDataDocumentation, TypedUserData, WrappedBuilder,
 };
 pub use module::{TypedModule, TypedModuleBuilder, TypedModuleFields, TypedModuleMethods};
 
 use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    borrow::Cow, cell::{Cell, RefCell}, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData, rc::Rc, sync::{Arc, Mutex}
 };
 
 use function::Return;
 pub use function::{Param, TypedFunction};
 
-use mlua::Variadic;
+use mlua::{IntoLua, MetaMethod, Value, Variadic};
 
 /// Add a lua [`Type`] representation to a rust type
 pub trait Typed {
@@ -45,7 +44,7 @@ macro_rules! impl_static_typed {
             $(
                 impl Typed for $target {
                     fn ty() -> Type {
-                        Type::single($name)
+                        Type::named($name)
                     }
                 }
             )*
@@ -64,7 +63,7 @@ macro_rules! impl_static_typed_generic {
             $(
                 impl<$($lt,)+> Typed for $target {
                     fn ty() -> Type {
-                        Type::single($name)
+                        Type::named($name)
                     }
                 }
             )*
@@ -84,24 +83,22 @@ impl_static_typed! {
 impl_static_typed_generic! {
     for<'a> Cow<'a, str> => "string",
     for<'lua> mlua::Function<'lua> => "fun()",
+    for<'lua> mlua::Table<'lua> => "table",
     for<'lua> mlua::AnyUserData<'lua> => "userdata",
     for<'lua> mlua::String<'lua> => "string",
     for<'lua> mlua::Thread<'lua> => "thread",
 }
 
+impl<'lua> Typed for mlua::Value<'lua> {
+    fn ty() -> Type {
+        Type::Single("any".into())
+    }
+}
+
 impl<T: Typed> Typed for Variadic<T> {
     /// ...type
     fn ty() -> Type {
-        Type::Variadic(T::ty().into())
-    }
-
-    /// @param ... type
-    fn as_param() -> Param {
-        Param {
-            doc: None,
-            name: Some("...".into()),
-            ty: T::ty(),
-        }
+        Type::any()
     }
 }
 
@@ -112,21 +109,60 @@ impl<T: Typed> Typed for Option<T> {
     }
 }
 
-impl From<&'static str> for Type {
-    fn from(value: &'static str) -> Self {
-        Type::Single(value.into())
+impl<T: IntoLuaTypeLiteral> From<T> for Type {
+    fn from(value: T) -> Self {
+        Type::Single(value.into_lua_type_literal().into())
     }
 }
 
-impl From<Cow<'static, str>> for Type {
-    fn from(value: Cow<'static, str>) -> Self {
-        Type::Single(value.clone())
+impl<T: Typed> Typed for Arc<T> {
+    fn ty() -> Type {
+        T::ty()
     }
 }
 
-impl From<String> for Type {
-    fn from(value: String) -> Self {
-        Type::Single(value.into())
+impl<T: Typed> Typed for Rc<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+}
+
+impl<T: Typed> Typed for Cell<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+}
+
+impl<T: Typed> Typed for RefCell<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+}
+
+impl<T: Typed> Typed for Mutex<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+}
+
+impl<T: Typed> Typed for PhantomData<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+}
+
+// Represents a lua tuple.
+//
+// With luaCATS tuples are represented with square brackets.
+//
+// # Example
+//
+// ```lua
+// --- @type [string, integer, "literal"]
+// ```
+impl<const N: usize> From<[Type;N]> for Type {
+    fn from(value: [Type;N]) -> Self {
+        Type::Tuple(Vec::from(value))
     }
 }
 
@@ -137,21 +173,25 @@ impl<I: Typed, const N: usize> Typed for [I; N] {
         Type::Array(I::ty().into())
     }
 }
+
 impl<I: Typed> Typed for Vec<I> {
     fn ty() -> Type {
         Type::Array(I::ty().into())
     }
 }
+
 impl<I: Typed> Typed for &[I] {
     fn ty() -> Type {
         Type::Array(I::ty().into())
     }
 }
+
 impl<I: Typed> Typed for HashSet<I> {
     fn ty() -> Type {
         Type::Array(I::ty().into())
     }
 }
+
 impl<I: Typed> Typed for BTreeSet<I> {
     fn ty() -> Type {
         Type::Array(I::ty().into())
@@ -169,6 +209,7 @@ where
         Type::Map(K::ty().into(), V::ty().into())
     }
 }
+
 impl<K, V> Typed for HashMap<K, V>
 where
     K: Typed,
@@ -179,25 +220,178 @@ where
     }
 }
 
+/// Represents a lua table key
+///
+/// Table keys can be either a string or an integer
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+pub enum Index {
+    Int(usize),
+    Str(Cow<'static, str>),
+}
+
+impl std::fmt::Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(num) => write!(f, "[{num}]"),
+            Self::Str(val) => if val.chars().any(|v| !v.is_alphanumeric() && v != '_') {
+                write!(f, r#"["{val}"]"#)
+            } else {
+                write!(f, "{val}")
+            }
+        }
+    }
+}
+
+impl<'lua> IntoLua<'lua> for Index {
+    fn into_lua(self, lua: &'lua mlua::Lua) -> mlua::prelude::LuaResult<Value<'lua>> {
+        match self {
+            Self::Int(num) => Ok(mlua::Value::Integer(num as mlua::Integer)),
+            Self::Str(val) => val.into_lua(lua)
+        }
+    }
+}
+
+impl From<MetaMethod> for Index {
+    fn from(value: MetaMethod) -> Self {
+        Self::Str(value.as_ref().to_string().into())
+    }
+}
+
+impl From<Cow<'static, str>> for Index {
+    fn from(value: Cow<'static, str>) -> Self {
+        Self::Str(value)
+    }
+}
+
+impl From<&'static str> for Index {
+    fn from(value: &'static str) -> Self {
+        Self::Str(value.into())
+    }
+}
+
+impl From<String> for Index {
+    fn from(value: String) -> Self {
+        Self::Str(value.into())
+    }
+}
+
+impl From<usize> for Index {
+    fn from(value: usize) -> Self {
+        Self::Int(value)
+    }
+}
+
 /// Representation of a lua type for a rust type
-#[derive(Debug, Clone, PartialEq, strum::AsRefStr, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, strum::AsRefStr, strum::EnumIs, PartialOrd, Eq, Ord, Hash)]
 pub enum Type {
-    /// string
-    /// nil
-    /// boolean
-    /// "literal"
-    /// 3
-    /// ... etc
+    /// Represents a single type. i.e. `string`, `number`, `0`, `"literal"`, `Example`, etc...
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @type string
+    /// --- @type number 
+    /// --- @type 0
+    /// --- @type "literal"
+    /// --- @type Example
+    /// ```
     Single(Cow<'static, str>),
+    /// Represents a typed value
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @type {type}
+    /// value = nil
+    /// ```
     Value(Box<Type>),
-    /// --- @alias {name} <type>
+    /// Represents a type alias
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @alias MyType {type}
+    /// ```
     Alias(Box<Type>),
-    /// Same as alias but with a set name predefined
-    /// --- @alias {name} <type>
-    Enum(Cow<'static, str>, Vec<Type>),
+    /// Represents a tuple type
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @type [number, integer, string]
+    /// ```
+    Tuple(Vec<Type>),
+    /// Represents a table literal
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @type { name: string, age: integer, height: number }
+    /// ```
+    Table(BTreeMap<Index, Type>),
+    /// Represents a type union
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @type string | number | "literal" | Example
+    /// ```
+    Union(Vec<Type>),
+    /// Represents an array of a single type
+    ///
+    /// # Example
+    /// ```lua
+    /// --- @type string[]
+    /// ```
+    Array(Box<Type>),
+    /// Represents a table with set key types and value types
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @type { [string]: boolean }
+    /// ```
+    Map(Box<Type>, Box<Type>),
+    /// Represents a function with it's parameters and return types
+    ///
+    /// # Example
+    /// 
+    /// ```lua
+    /// --- @type fun(self: any, name: string): string
+    /// ```
+    Function {
+        params: Vec<Param>,
+        returns: Vec<Return>,
+    },
+    /// References a enum type.
+    ///
+    /// In this instance it acts like a union since that is the closest relation between rust
+    /// enums and a lua type
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @alias {name} {type}
+    /// ---  | {type}
+    /// ---  | {type}
+    /// ---  | {type}
+    /// ```
+    Enum(Vec<Type>),
+    /// Represents a class type
+    ///
+    /// # Example
+    ///
+    /// ```lua
     /// --- @class {name}
-    /// --- @field ...
+    /// --- @field name string
+    /// --- @field age integer 
+    /// --- @field height number
+    /// ```
     Class(Box<TypedClassBuilder>),
+    /// Represents a global table (module)
+    ///
+    /// # Example
+    ///
     /// ```lua
     /// module = {
     ///     data = nil,
@@ -213,17 +407,6 @@ pub enum Type {
     /// module.data = nil
     /// ```
     Module(Box<TypedModuleBuilder>),
-    /// { [1]: <type>, [2]: <type>, ...etc }
-    Tuple(Vec<Type>),
-    Struct(BTreeMap<&'static str, Type>),
-    Variadic(Box<Type>),
-    Union(Vec<Type>),
-    Array(Box<Type>),
-    Map(Box<Type>, Box<Type>),
-    Function {
-        params: Vec<Param>,
-        returns: Vec<Return>,
-    },
 }
 
 /// Allows to union types
@@ -233,13 +416,13 @@ pub enum Type {
 /// ```
 /// use mlua_extras::typed::Type;
 ///
-/// Type::single("string") | Type::single("nil")
+/// Type::string() | Type::nil()
 /// ```
-impl std::ops::BitOr for Type {
+impl<T: Into<Type>> std::ops::BitOr<T> for Type {
     type Output = Self;
 
-    fn bitor(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+    fn bitor(self, rhs: T) -> Self::Output {
+        match (self, rhs.into()) {
             (Self::Union(mut types), Self::Union(other_types)) => {
                 for ty in other_types {
                     if !types.contains(&ty) {
@@ -266,27 +449,77 @@ impl std::ops::BitOr for Type {
 }
 
 impl Type {
-    /// Create a lua type literal for a string. i.e. `"string"`
-    pub fn literal_string<T: std::fmt::Display>(value: T) -> Self {
-        Self::Single(format!("\"{value}\"").into())
-    }
-
     /// Create a lua type literal from a rust value. i.e. `3`, `true`, etc...
-    pub fn literal<T: std::fmt::Display>(value: T) -> Self {
-        Self::Single(value.to_string().into())
+    pub fn literal<T: IntoLuaTypeLiteral>(value: T) -> Self {
+        Self::Single(value.into_lua_type_literal().into())
     }
 
-    /// Create a type that has a single value. i.e. `string`, `number`, etc...
-    pub fn single(value: impl Into<Cow<'static, str>>) -> Self {
+    /// Create a references the name of another defined type.
+    ///
+    /// # Example
+    ///
+    /// ```lua
+    /// --- @class Example
+    ///
+    /// --- @type Example
+    /// example = nil
+    /// ```
+    ///
+    /// ```
+    /// use mlua_extras::typed::Type;
+    ///
+    /// // This references the type named `Example`
+    /// Type::named("Example")
+    /// ```
+    pub fn named(value: impl Into<Cow<'static, str>>) -> Self {
         Self::Single(value.into())
+    }
+
+    /// Create a lua builtin `string` type
+    pub fn string() -> Self {
+        Self::Single("string".into())
+    }
+
+    /// Create a lua builtin `integer` type
+    pub fn integer() -> Self {
+        Self::Single("integer".into())
+    }
+
+    /// Create a lua builtin `number` type
+    pub fn number() -> Self {
+        Self::Single("number".into())
+    }
+
+    /// Create a lua builtin `boolean` type
+    pub fn boolean() -> Self {
+        Self::Single("boolean".into())
+    }
+
+    /// Create a lua builtin `nil` type
+    pub fn nil() -> Self {
+        Self::Single("nil".into())
+    }
+
+    /// Create a lua builtin `any` type
+    pub fn any() -> Self {
+        Self::Single("any".into())
+    }
+
+    /// Create a lua builtin `lightuserdata` type
+    pub fn lightuserdata() -> Self {
+        Self::Single("lightuserdata".into())
+    }
+
+    /// Create a lua builtin `thread` type
+    pub fn thread() -> Self {
+        Self::Single("thread".into())
     }
 
     /// Create an enum type. This is equal to an [`alias`][crate::typed::Type::Alias]
     pub fn r#enum(
-        name: impl Into<Cow<'static, str>>,
         types: impl IntoIterator<Item = Type>,
     ) -> Self {
-        Self::Enum(name.into(), types.into_iter().collect())
+        Self::Enum(types.into_iter().collect())
     }
 
     /// Create a type that is an alias. i.e. `--- @alias {name} string`
@@ -294,14 +527,14 @@ impl Type {
         Self::Alias(Box::new(ty))
     }
 
-    /// Create a type that is variadic. i.e. `...type`
-    pub fn variadic(ty: Type) -> Self {
-        Self::Variadic(Box::new(ty))
-    }
-
     /// Create a type that is an array. i.e. `{ [integer]: type }`
     pub fn array(ty: Type) -> Self {
         Self::Array(Box::new(ty))
+    }
+
+    /// Create a type that is an array. i.e. `{ [integer]: type }`
+    pub fn map(key: Type, value: Type) -> Self {
+        Self::Map(Box::new(key), Box::new(value))
     }
 
     /// Create a type that is a union. i.e. `string | integer | nil`
@@ -334,24 +567,61 @@ impl Type {
                 .collect(),
         }
     }
+
+    /// A table that has defined entries.
+    ///
+    /// If the goal is a map like syntax use [`Type::Map`] or [`Type::map`] instead
+    pub fn table(items: impl IntoIterator<Item=(Index, Type)>) -> Self {
+        Self::Table(items.into_iter().collect())
+    }
 }
 
-/// Helper to create a union type
-///
-/// :NOTE: This is a work in progress macro
-///
-/// # Example
-///
-/// ```
-/// use mlua_extras::{union, typed::Type};
-/// union!("string", "number", "nil", Type::array(Type::single("string")))
-/// ```
-#[macro_export]
-macro_rules! union {
-    ($($typ: expr),*) => {
-        $crate::typed::Type::Union(Vec::from([$(Type::from($typ),)*]))
+pub trait IntoLuaTypeLiteral {
+    /// Construct the representation of the value as a lua type
+    fn into_lua_type_literal(self) -> String;
+}
+
+impl IntoLuaTypeLiteral for String {
+    fn into_lua_type_literal(self) -> String {
+        format!("\"{self}\"")
+    }
+}
+
+impl IntoLuaTypeLiteral for &String {
+    fn into_lua_type_literal(self) -> String {
+        format!("\"{self}\"")
+    }
+}
+
+impl IntoLuaTypeLiteral for &str {
+    fn into_lua_type_literal(self) -> String {
+        format!("\"{self}\"")
+    }
+}
+
+macro_rules! impl_type_literal {
+    ($($lit: ty),* $(,)?) => {
+        $(
+            impl IntoLuaTypeLiteral for $lit {
+                fn into_lua_type_literal(self) -> String {
+                    self.to_string()
+                }
+            } 
+            impl IntoLuaTypeLiteral for &$lit {
+                fn into_lua_type_literal(self) -> String {
+                    self.to_string()
+                }
+            } 
+        )*
     };
 }
+
+impl_type_literal!{
+    u8, u16, u32, u64, usize, u128,
+    i8, i16, i32, i64, isize, i128,
+    f32, f64
+}
+impl_type_literal!{bool}
 
 /// Typed information for a lua [`MultiValue`][mlua::MultiValue]
 pub trait TypedMultiValue {
@@ -431,16 +701,68 @@ impl_typed_multi_value!(A);
 impl_typed_multi_value!();
 
 /// Type information for a lua `class` field
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Field {
     pub ty: Type,
     pub doc: Option<Cow<'static, str>>,
 }
 
+impl Field {
+    pub fn new(ty: Type, doc: impl IntoDocComment) -> Self {
+        Self {
+            ty,
+            doc: doc.into_doc_comment()
+        }
+    }
+}
+
 /// Type information for a lua `class` function
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Func {
     pub params: Vec<Param>,
     pub returns: Vec<Return>,
     pub doc: Option<Cow<'static, str>>,
+}
+
+impl Func {
+    pub fn new<Params, Returns>(doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        Self {
+            params: Params::get_types_as_params(),
+            returns: Returns::get_types_as_returns(),
+            doc: doc.into_doc_comment()
+        }
+    }
+}
+
+/// Helper that converts multiple different types into an `Option<Cow<'static, str>>`
+pub trait IntoDocComment {
+    fn into_doc_comment(self) -> Option<Cow<'static, str>>;
+}
+
+impl IntoDocComment for String {
+    fn into_doc_comment(self) -> Option<Cow<'static, str>> {
+        Some(self.into())
+    }
+}
+
+impl IntoDocComment for &str {
+    fn into_doc_comment(self) -> Option<Cow<'static, str>> {
+        Some(self.to_string().into())
+    }
+}
+
+impl IntoDocComment for () {
+    fn into_doc_comment(self) -> Option<Cow<'static, str>> {
+        None
+    }
+}
+
+impl IntoDocComment for Option<String> {
+    fn into_doc_comment(self) -> Option<Cow<'static, str>> {
+        self.map(|v| v.into())
+    }
 }

@@ -1,6 +1,6 @@
-use std::{any::type_name, borrow::Cow, collections::BTreeMap};
+use std::{any::{type_name, Any}, borrow::Cow, collections::BTreeMap};
 
-use super::{generator::FunctionBuilder, Field, Func, Typed, TypedMultiValue};
+use super::{generator::FunctionBuilder, Field, Func, Index, IntoDocComment, Type, Typed, TypedMultiValue};
 use crate::{
     extras::{Module, ModuleFields, ModuleMethods},
     MaybeSend,
@@ -8,22 +8,28 @@ use crate::{
 use mlua::{FromLuaMulti, IntoLua, IntoLuaMulti};
 
 /// Builder that constructs type and documentation information for a module using the [`TypedModule`] trait
-#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypedModuleBuilder {
     pub doc: Option<Cow<'static, str>>,
 
-    pub nested_modules: BTreeMap<Cow<'static, str>, TypedModuleBuilder>,
+    pub nested_modules: BTreeMap<Index, TypedModuleBuilder>,
 
-    pub fields: BTreeMap<Cow<'static, str>, Field>,
-    pub meta_fields: BTreeMap<Cow<'static, str>, Field>,
+    pub fields: BTreeMap<Index, Field>,
+    pub meta_fields: BTreeMap<Index, Field>,
 
-    pub functions: BTreeMap<Cow<'static, str>, Func>,
-    pub methods: BTreeMap<Cow<'static, str>, Func>,
-    pub meta_functions: BTreeMap<Cow<'static, str>, Func>,
-    pub meta_methods: BTreeMap<Cow<'static, str>, Func>,
+    pub functions: BTreeMap<Index, Func>,
+    pub methods: BTreeMap<Index, Func>,
+    pub meta_functions: BTreeMap<Index, Func>,
+    pub meta_methods: BTreeMap<Index, Func>,
 
     queued_doc: Option<String>,
     parents: Vec<&'static str>,
+}
+
+impl From<TypedModuleBuilder> for Type {
+    fn from(value: TypedModuleBuilder) -> Self {
+        Type::Module(Box::new(value))
+    }
 }
 
 impl TypedModuleBuilder {
@@ -55,6 +61,280 @@ impl TypedModuleBuilder {
             && self.meta_functions.is_empty()
             && self.meta_methods.is_empty()
     }
+
+    /// Creates a new typed field and adds it to the class's type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .field("data1", Type::string() | Type::nil(), "doc comment goes last")
+    ///     .field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
+    ///     .field("message", Type::string(), foramt!("A message for {NAME}"))
+    /// ```
+    pub fn field<S: AsRef<str>>(mut self, name: impl AsRef<str>, ty: Type, doc: impl IntoDocComment) -> Self {
+        self.fields.insert(name.as_ref().to_string().into(), Field::new(ty, doc));
+        self
+    }
+
+    /// Creates a new typed function and adds it to the class's type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .function::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .function::<String, ()>("hello", ())
+    /// ```
+    pub fn function<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.functions.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`function`][TypedModuleBuilder::function] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .function_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn function_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.functions.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed method and adds it to the class's type information.
+    ///
+    /// As with methods in lua, the `self` parameter is implicit and has the same type as the
+    /// parent class.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .method::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method::<String, ()>("hello", ())
+    /// ```
+    pub fn method<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.methods.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`method`][TypedModuleBuilder::method] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn method_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.methods.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed field and adds it to the class's meta type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .meta_field("data1", Type::string() | Type::nil(), "doc comment goes last")
+    ///     .meta_field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
+    ///     .meta_field("message", Type::string(), foramt!("A message for {NAME}"))
+    /// ```
+    pub fn meta_field<S: AsRef<str>>(mut self, name: impl AsRef<str>, ty: Type, doc: impl IntoDocComment) -> Self {
+        self.meta_fields.insert(name.as_ref().to_string().into(), Field::new(ty, doc));
+        self
+    }
+
+    /// Creates a new typed function and adds it to the class's meta type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .meta_function::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_function::<String, ()>("hello", ())
+    /// ```
+    pub fn meta_function<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.meta_functions.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`meta_function`][TypedModuleBuilder::meta_function] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_function_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn meta_function_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.meta_functions.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed method and adds it to the class's type information.
+    ///
+    /// As with methods in lua, the `self` parameter is implicit and has the same type as the
+    /// parent class.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .method::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method::<String, ()>("hello", ())
+    /// ```
+    pub fn meta_method<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.meta_methods.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`meta_method`][TypedModuleBuilder::meta_method] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_method_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn meta_method_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.meta_methods.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
 }
 
 /// Typed variant of [`ModuleFields`]
@@ -65,17 +345,17 @@ pub trait TypedModuleFields<'lua> {
     /// Typed variant of [`add_field`][ModuleFields::add_field] only collecting the type information
     fn add_field<K, V>(&mut self, name: K, value: V) -> mlua::Result<()>
     where
-        K: AsRef<str>,
+        K: Into<Index>,
         V: IntoLua<'lua> + Typed;
 
     /// Typed variant of [`add_meta_field`][ModuleFields::add_meta_field] only collecting the type information
     fn add_meta_field<K, V>(&mut self, name: K, value: V) -> mlua::Result<()>
     where
-        K: AsRef<str>,
+        K: Into<Index>,
         V: IntoLua<'lua> + Typed;
 
     /// Typed variant of [`add_module`][ModuleFields::add_module] only collecting the type information
-    fn add_module<V>(&mut self, name: impl AsRef<str>) -> mlua::Result<()>
+    fn add_module<V>(&mut self, name: impl Into<Index>) -> mlua::Result<()>
     where
         V: TypedModule;
 }
@@ -88,8 +368,8 @@ pub trait TypedModuleMethods<'lua> {
     /// Typed variant of [`add_function`][ModuleMethods::add_function] only collecting the type information
     fn add_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue;
 
@@ -104,8 +384,8 @@ pub trait TypedModuleMethods<'lua> {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>);
@@ -113,8 +393,8 @@ pub trait TypedModuleMethods<'lua> {
     /// Typed variant of [`add_meta_function`][ModuleMethods::add_meta_function] only collecting the type information
     fn add_meta_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue;
 
@@ -129,8 +409,8 @@ pub trait TypedModuleMethods<'lua> {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>);
@@ -138,8 +418,8 @@ pub trait TypedModuleMethods<'lua> {
     /// Typed variant of [`add_method`][ModuleMethods::add_method] only collecting the type information
     fn add_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue;
 
@@ -154,8 +434,8 @@ pub trait TypedModuleMethods<'lua> {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>);
@@ -163,8 +443,8 @@ pub trait TypedModuleMethods<'lua> {
     /// Typed variant of [`add_meta_method`][ModuleMethods::add_meta_method] only collecting the type information
     fn add_meta_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue;
 
@@ -179,8 +459,8 @@ pub trait TypedModuleMethods<'lua> {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>);
@@ -194,25 +474,25 @@ impl<'module, 'lua, M: ModuleFields<'lua>> TypedModuleFields<'lua> for WrappedMo
 
     fn add_field<K, V>(&mut self, name: K, value: V) -> mlua::Result<()>
     where
-        K: AsRef<str>,
+        K: Into<Index>,
         V: IntoLua<'lua> + Typed,
     {
-        self.0.add_field(name.as_ref(), value)
+        self.0.add_field(name.into(), value)
     }
 
     fn add_meta_field<K, V>(&mut self, name: K, value: V) -> mlua::Result<()>
     where
-        K: AsRef<str>,
+        K: Into<Index>,
         V: IntoLua<'lua> + Typed,
     {
-        self.0.add_meta_field(name.as_ref(), value)
+        self.0.add_meta_field(name.into(), value)
     }
 
-    fn add_module<V>(&mut self, name: impl AsRef<str>) -> mlua::Result<()>
+    fn add_module<V>(&mut self, name: impl Into<Index>) -> mlua::Result<()>
     where
         V: TypedModule,
     {
-        self.0.add_module::<&str, V>(name.as_ref())
+        self.0.add_module::<Index, V>(name.into())
     }
 }
 
@@ -223,13 +503,13 @@ impl<'module, 'lua, M: ModuleMethods<'lua>> TypedModuleMethods<'lua> for Wrapped
 
     fn add_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.0
-            .add_function::<&str, F, A, R>(name.as_ref(), function)
+            .add_function::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_function_with<K, F, A, R, G>(
@@ -239,24 +519,24 @@ impl<'module, 'lua, M: ModuleMethods<'lua>> TypedModuleMethods<'lua> for Wrapped
         _generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
     {
         self.0
-            .add_function::<&str, F, A, R>(name.as_ref(), function)
+            .add_function::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_meta_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
-        self.0.add_meta_function::<&str, F, A, R>(name.as_ref(), function)
+        self.0.add_meta_function::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_meta_function_with<K, F, A, R, G>(
@@ -266,24 +546,24 @@ impl<'module, 'lua, M: ModuleMethods<'lua>> TypedModuleMethods<'lua> for Wrapped
         _generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
     {
-        self.0.add_meta_function::<&str, F, A, R>(name.as_ref(), function)
+        self.0.add_meta_function::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.0
-            .add_method::<&str, F, A, R>(name.as_ref(), function)
+            .add_method::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_method_with<K, F, A, R, G>(
@@ -293,24 +573,24 @@ impl<'module, 'lua, M: ModuleMethods<'lua>> TypedModuleMethods<'lua> for Wrapped
         _generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
     {
         self.0
-            .add_method::<&str, F, A, R>(name.as_ref(), function)
+            .add_method::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_meta_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
-        self.0.add_meta_method::<&str, F, A, R>(name.as_ref(), function)
+        self.0.add_meta_method::<Index, F, A, R>(name.into(), function)
     }
 
     fn add_meta_method_with<K, F, A, R, G>(
@@ -320,14 +600,14 @@ impl<'module, 'lua, M: ModuleMethods<'lua>> TypedModuleMethods<'lua> for Wrapped
         _generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.0
-            .add_meta_method::<&str, F, A, R>(name.as_ref(), function)
+            .add_meta_method::<Index, F, A, R>(name.into(), function)
     }
 }
 
@@ -337,7 +617,7 @@ impl<'lua> TypedModuleFields<'lua> for TypedModuleBuilder {
         self
     }
 
-    fn add_module<V>(&mut self, name: impl AsRef<str>) -> mlua::Result<()>
+    fn add_module<V>(&mut self, name: impl Into<Index>) -> mlua::Result<()>
     where
         V: TypedModule,
     {
@@ -365,17 +645,17 @@ impl<'lua> TypedModuleFields<'lua> for TypedModuleBuilder {
         V::add_fields(&mut nested)?;
         V::add_methods(&mut nested)?;
 
-        self.nested_modules.insert(name.as_ref().to_string().into(), nested);
+        self.nested_modules.insert(name.into(), nested);
         Ok(())
     }
 
     fn add_field<K, V>(&mut self, name: K, _value: V) -> mlua::Result<()>
     where
-        K: AsRef<str>,
+        K: Into<Index>,
         V: IntoLua<'lua> + Typed,
     {
         self.fields.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Field {
                 ty: V::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
@@ -386,11 +666,11 @@ impl<'lua> TypedModuleFields<'lua> for TypedModuleBuilder {
 
     fn add_meta_field<K, V>(&mut self, name: K, _value: V) -> mlua::Result<()>
     where
-        K: AsRef<str>,
+        K: Into<Index>,
         V: IntoLua<'lua> + Typed,
     {
         self.meta_fields.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Field {
                 ty: V::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
@@ -408,13 +688,13 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
 
     fn add_function<K, F, A, R>(&mut self, name: K, _function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.functions.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -431,8 +711,8 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
@@ -441,7 +721,7 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator(&mut builder);
 
         self.functions.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -453,13 +733,13 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
 
     fn add_meta_function<K, F, A, R>(&mut self, name: K, _function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.meta_functions.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -476,8 +756,8 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
@@ -486,7 +766,7 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator(&mut builder);
 
         self.meta_functions.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -498,13 +778,13 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
 
     fn add_method<K, F, A, R>(&mut self, name: K, _function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.methods.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -521,8 +801,8 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
@@ -531,7 +811,7 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator(&mut builder);
 
         self.methods.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
@@ -543,13 +823,13 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
 
     fn add_meta_method<K, F, A, R>(&mut self, name: K, _function: F) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
     {
         self.meta_methods.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: A::get_types_as_params(),
                 returns: R::get_types_as_returns(),
@@ -566,8 +846,8 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator: G,
     ) -> mlua::Result<()>
     where
-        K: AsRef<str>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        K: Into<Index>,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua> + TypedMultiValue,
         R: IntoLuaMulti<'lua> + TypedMultiValue,
         G: Fn(&mut FunctionBuilder<A, R>),
@@ -576,7 +856,7 @@ impl<'lua> TypedModuleMethods<'lua> for TypedModuleBuilder {
         generator(&mut builder);
 
         self.meta_methods.insert(
-            name.as_ref().to_string().into(),
+            name.into(),
             Func {
                 params: builder.params,
                 returns: builder.returns,
