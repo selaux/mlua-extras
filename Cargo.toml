@@ -57,3 +57,7 @@ required-features = ["mlua", "derive", "serialize"]
 [[example]]
 name="function_signatures"
 required-features = ["mlua"]
+
+[[example]]
+name = "typed_v2"
+required-features = ["mlua", "derive", "serialize"]

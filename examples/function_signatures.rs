@@ -1,6 +1,9 @@
-use mlua_extras::{extras::Module, typed::{Type, TypedModule, TypedModuleMethods}};
+use mlua_extras::{
+    extras::Module,
+    typed::{Type, TypedModule, TypedModuleMethods},
+};
 /// Function Signatures Example
-/// 
+///
 /// This example is a minimal module which has a long function signature using implementations of [Into<TypedMultiValue>] for (X, Y, Z, ....) where X, Y, Z, ... implement [Into<Typed>]
 
 struct MyModule;
@@ -18,13 +21,33 @@ impl TypedModule for MyModule {
                     Ok(())
                 },
                 |func| {
-                    func.param(0, |param| param.name("p_number").doc("Some number").ty(Type::number()));
-                    func.param(1, |param| param.name("p_bool").doc("Some boolean").ty(Type::boolean()));
-                    func.param(2, |param| param.name("p_integer").doc("Somer integer").ty(Type::integer()));
-                    func.param(3, |param| param.name("p_string").doc("Some string").ty(Type::string()));
-                    func.param(4, |param| param.name("p_vec4").doc("A four value tuple of numbers, effectively a Vector3")
-                        .ty(Type::tuple([Type::number(),Type::number(),Type::number()])));
-                })?;
+                    func.param(0, |param| {
+                        param.name("p_number").doc("Some number").ty(Type::number());
+                    });
+                    func.param(1, |param| {
+                        param.name("p_bool").doc("Some boolean").ty(Type::boolean());
+                    });
+                    func.param(2, |param| {
+                        param
+                            .name("p_integer")
+                            .doc("Somer integer")
+                            .ty(Type::integer());
+                    });
+                    func.param(3, |param| {
+                        param.name("p_string").doc("Some string").ty(Type::string());
+                    });
+                    func.param(4, |param| {
+                        param
+                            .name("p_vec4")
+                            .doc("A four value tuple of numbers, effectively a Vector3")
+                            .ty(Type::tuple([
+                                Type::number(),
+                                Type::number(),
+                                Type::number(),
+                            ]));
+                    });
+                },
+            )?;
         // add a method that takes no parameters
         // Note that the `_params` is a unit tuple `()`. This denotes having no parameters
         methods

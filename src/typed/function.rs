@@ -50,7 +50,7 @@ impl Return {
         self.doc = doc.into_doc_comment();
         self
     }
-    
+
     /// Set the parameters doc comment
     pub fn ty(&mut self, ty: Type) -> &mut Self {
         self.ty = ty;
@@ -240,7 +240,10 @@ where
     fn ty() -> Type {
         Type::Function {
             params: Params::get_types_as_params(),
-            returns: Response::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+            returns: Response::get_types()
+                .into_iter()
+                .map(|ty| Return { doc: None, ty })
+                .collect(),
         }
     }
 }

@@ -88,7 +88,7 @@ where
     /// Update a parameter's information given it's position in the argument list
     pub fn param<F>(&mut self, index: usize, generator: F)
     where
-        F: Fn(&mut Param) -> &mut Param,
+        F: Fn(&mut Param),
     {
         if let Some(param) = self.params.get_mut(index) {
             generator(param);
@@ -98,7 +98,7 @@ where
     /// Update a return type's information given it's position in the return list
     pub fn ret<F>(&mut self, index: usize, generator: F)
     where
-        F: Fn(&mut Return) -> &mut Return,
+        F: Fn(&mut Return),
     {
         if let Some(ret) = self.returns.get_mut(index) {
             generator(ret);

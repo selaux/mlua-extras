@@ -5,8 +5,7 @@ mod class;
 mod module;
 
 pub use class::{
-    TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedUserData, WrappedBuilder,
-    TypedDataDocumentation,
+    TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedDataDocumentation, TypedUserData, WrappedBuilder,
 };
 pub use module::{TypedModule, TypedModuleBuilder, TypedModuleFields, TypedModuleMethods};
 
@@ -90,23 +89,16 @@ impl_static_typed_generic! {
     for<'lua> mlua::Thread<'lua> => "thread",
 }
 
-impl<'lua> Typed for Value<'lua> {
+impl<'lua> Typed for mlua::Value<'lua> {
     fn ty() -> Type {
-        Type::any()
+        Type::Single("any".into())
     }
 }
 
 impl<T: Typed> Typed for Variadic<T> {
+    /// ...type
     fn ty() -> Type {
-        T::ty()
-    }
-
-    fn as_param() -> Param {
-        Param {
-            doc: None,
-            name: Some("...".into()),
-            ty: T::ty(),
-        }
+        Type::any()
     }
 }
 

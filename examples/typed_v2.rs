@@ -1,6 +1,6 @@
 use std::io::stdout;
 
-use mlua::MetaMethod;
+use mlua::{MetaMethod, Value, Variadic};
 use mlua_extras::typed::{generator::{Definition, DefinitionFileGenerator, Definitions}, Type, TypedModule};
 
 struct NestedModule;
@@ -36,7 +36,22 @@ impl TypedModule for TestModule {
         methods
             .document("Greetings")
             .add_function_with("greet", |_, _name: String| { Ok(()) }, |func| {
-                func.param(0, |param| param.doc("Name of the person to greet").name("name"));
+                func.param(0, |param| { param.doc("Name of the person to greet").name("name"); });
+            })?;
+
+        methods
+            .document("Logs errors")
+            .add_function_with("LogError", |_, _args: (String, Variadic<Value>)| { Ok(()) }, |func| {
+                func.param(0, |param| { 
+                    param
+                        .name("format")
+                        .doc("String to pass to the formatter.");
+                });
+                func.param(1, |param| { 
+                    param
+                        .name("...")
+                        .doc("Arguments to pass to the formatter.");
+                });
             })?;
 
         methods
@@ -56,8 +71,8 @@ fn main() {
             .function::<String, ()>("greet", ())
             .function_with::<String, String, _>("greet", (), |func| {
                 func.document("Greet the name that was passed in");
-                func.param(0, |param| param.name("name").doc("Name of the person to greet"));
-                func.ret(0, |ret| ret.doc("Formatted greeting using the given name"));
+                func.param(0, |param| { param.name("name").doc("Name of the person to greet"); });
+                func.ret(0, |ret| { ret.doc("Formatted greeting using the given name"); });
             })
         )
         .finish();
