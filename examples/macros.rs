@@ -20,7 +20,7 @@ fn main() -> mlua::Result<()> {
     }?;
 
     // Extend an existing table with a function
-    let table = lua.globals().get::<_, Table>("table")?;
+    let table = lua.globals().get::<Table>("table")?;
     function! {
         lua fn table.keys(_lua, this: Table) {
             this.pairs::<Value, Value>()
@@ -59,14 +59,14 @@ fn main() -> mlua::Result<()> {
         }
     }?;
 
-    assert_eq!(custom_function.call::<_, usize>((1, 2))?, 3);
+    assert_eq!(custom_function.call::<usize>((1, 2))?, 3);
     assert_eq!(
-        temp.require::<Function>("add")?.call::<_, usize>((1, 2))?,
+        temp.require::<Function>("add")?.call::<usize>((1, 2))?,
         3
     );
     assert_eq!(
         temp.require::<Function>("nested.add")?
-            .call::<_, usize>((1, 2))?,
+            .call::<usize>((1, 2))?,
         3
     );
 

@@ -16,7 +16,7 @@ impl TypedModule for TestModule {
         Some("Test module documentation".into())
     }
 
-    fn add_fields<'lua, F: mlua_extras::typed::TypedModuleFields<'lua>>(fields: &mut F) -> mlua::Result<()> {
+    fn add_fields<F: mlua_extras::typed::TypedModuleFields>(fields: &mut F) -> mlua::Result<()> {
         fields
             .document("Some test data")
             .add_field("data", "Some data")?;
@@ -32,26 +32,24 @@ impl TypedModule for TestModule {
         Ok(())
     }
 
-    fn add_methods<'lua, M: mlua_extras::typed::TypedModuleMethods<'lua>>(methods: &mut M) -> mlua::Result<()> {
+    fn add_methods<M: mlua_extras::typed::TypedModuleMethods>(methods: &mut M) -> mlua::Result<()> {
         methods
             .document("Greetings")
             .add_function_with("greet", |_, _name: String| { Ok(()) }, |func| {
-                func.param(0, |param| { param.doc("Name of the person to greet").name("name"); });
+                func.param(0).unwrap().doc("Name of the person to greet").name("name");
             })?;
 
         methods
             .document("Logs errors")
             .add_function_with("LogError", |_, _args: (String, Variadic<Value>)| { Ok(()) }, |func| {
-                func.param(0, |param| { 
-                    param
-                        .name("format")
-                        .doc("String to pass to the formatter.");
-                });
-                func.param(1, |param| { 
-                    param
-                        .name("...")
-                        .doc("Arguments to pass to the formatter.");
-                });
+                func.param(0)
+                    .unwrap()
+                    .name("format")
+                    .doc("String to pass to the formatter.");
+                func.param(1)
+                    .unwrap()
+                    .name("...")
+                    .doc("Arguments to pass to the formatter.");
             })?;
 
         methods
@@ -71,8 +69,8 @@ fn main() {
             .function::<String, ()>("greet", ())
             .function_with::<String, String, _>("greet", (), |func| {
                 func.document("Greet the name that was passed in");
-                func.param(0, |param| { param.name("name").doc("Name of the person to greet"); });
-                func.ret(0, |ret| { ret.doc("Formatted greeting using the given name"); });
+                func.param(0).unwrap().name("name").doc("Name of the person to greet");
+                func.ret(0).unwrap().doc("Formatted greeting using the given name");
             })
         )
         .finish();

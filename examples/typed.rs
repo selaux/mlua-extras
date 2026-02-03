@@ -62,15 +62,15 @@ impl TypedUserData for Color {
         docs.add("Representation of a color");
     }
 
-    fn add_methods<'lua, T: TypedDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
         methods.add_meta_method(MetaMethod::ToString, |_lua, this, _: ()| {
             Ok(format!("{this:?}"))
         });
     }
 }
 
-impl<'lua> FromLua<'lua> for Color {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
+impl FromLua for Color {
+    fn from_lua(value: Value, lua: &Lua) -> mlua::prelude::LuaResult<Self> {
         match value {
             Value::UserData(data) => data.borrow::<Self>().map(|v| *v),
             // Use serde deserialize if not userdata
@@ -92,8 +92,8 @@ impl Default for Example {
     }
 }
 
-impl<'lua> FromLua<'lua> for Example {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
+impl FromLua for Example {
+    fn from_lua(value: Value, lua: &Lua) -> mlua::prelude::LuaResult<Self> {
         match value {
             Value::UserData(data) => data.borrow::<Self>().map(|v| *v),
             other => lua.from_value(other),
@@ -106,7 +106,7 @@ impl TypedUserData for Example {
         docs.add("This is a doc comment section for the overall type");
     }
 
-    fn add_fields<'lua, F: TypedDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<F: TypedDataFields<Self>>(fields: &mut F) {
         fields
             .document("Example complex type")
             .add_field_method_get_set(
@@ -119,7 +119,7 @@ impl TypedUserData for Example {
             );
     }
 
-    fn add_methods<'lua, T: TypedDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
         methods
             .document("print all items")
             .add_function(
@@ -136,16 +136,12 @@ impl TypedUserData for Example {
         methods
             .document("Log a specific format with any lua types")
             .add_function_with("LogAny", |_, _args: (String, Variadic<Value>)| { Ok(()) }, |func| {
-                func.param(0, |param| {
-                    param
-                        .name("format")
-                        .doc("String to pass to the formatter.");
-                });
-                func.param(1, |param| {
-                    param
-                        .name("...")
-                        .doc("Arguments to pass to the formatter.");
-                });
+                func.param(0).unwrap()
+                    .name("format")
+                    .doc("String to pass to the formatter.");
+                func.param(1).unwrap()
+                    .name("...")
+                    .doc("Arguments to pass to the formatter.");
             });
 
         methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| {

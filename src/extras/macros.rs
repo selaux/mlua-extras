@@ -30,9 +30,9 @@
 /// use mlua::{Lua, Table};
 ///
 /// let lua = Lua::new();
-/// lua.globals().get::<_, Table>("nested")?.set("name", lua.create_function(|lua, ()| Ok(()))?)?;
+/// lua.globals().get::<Table>("nested")?.set("name", lua.create_function(|lua, ()| Ok(()))?)?;
 ///
-/// let nested = lua.globals().get::<_, Table>("deep")?.get::<_, Table>("nested");
+/// let nested = lua.globals().get::<Table>("deep")?.get::<Table>("nested");
 /// nested.set("name", lua.create_function(|lua, ()| Ok(())))?;
 /// ```
 ///
@@ -51,7 +51,7 @@
 ///     }
 /// }
 ///
-/// let nested = lua.globals().get::<_, Table>("deep")?;
+/// let nested = lua.globals().get::<Table>("deep")?;
 /// function! {
 ///     lua fn deep::nested.name(lua) {
 ///         Ok(())

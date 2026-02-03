@@ -141,16 +141,16 @@ fn main() -> mlua::Result<()> {
     let lua = Lua::new();
 
     // Prepend path to the lua `path`
-    let path = lua.globals().get::<_, Table>("package")?.get::<_, String>("path");
-    lua.globals().get::<_, Table>("package")?.set("path", format!("?.lua;{path}"))?;
+    let path = lua.globals().get::<Table>("package")?.get::<String>("path");
+    lua.globals().get::<Table>("package")?.set("path", format!("?.lua;{path}"))?;
 
     let temp = lua.create_table()?;
     temp.set("getName", lua.create_function(|lua, ()| Ok("name"))?;
 
     // Get a nested function: `table.unpack`
-    let unpack = lua.globals().get::<_, Table>("table")?.get::<_, Function>("unpack")?;
+    let unpack = lua.globals().get::<Table>("table")?.get::<_, Function>("unpack")?;
     // Call the `table.unpack` function
-    let _ = unpack.call::<_, Variadic<Value>>(temp)?;
+    let _ = unpack.call::<Variadic<Value>>(temp)?;
     Ok(())
 }
 ```

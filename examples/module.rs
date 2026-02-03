@@ -2,7 +2,7 @@ use mlua_extras::{extras::Module, typed::{TypedModule, TypedModuleBuilder, Typed
 
 struct Nested;
 impl TypedModule for Nested {
-    fn add_methods<'lua, M: TypedModuleMethods<'lua>>(methods: &mut M) -> mlua::Result<()> {
+    fn add_methods<M: TypedModuleMethods>(methods: &mut M) -> mlua::Result<()> {
         methods
             .document("Print hello to the name passed in")
             .add_function_with(
@@ -12,14 +12,14 @@ impl TypedModule for Nested {
                     Ok(())
                 },
                 |func| {
-                    func.param(0, |param| param.name("name").doc("Name of the person to greet"));
+                    func.param(0, |param| { param.name("name").doc("Name of the person to greet"); });
                 })
     }
 }
 
 struct Test;
 impl TypedModule for Test {
-    fn add_fields<'lua, F: TypedModuleFields<'lua>>(fields: &mut F) -> mlua::Result<()> {
+    fn add_fields<F: TypedModuleFields>(fields: &mut F) -> mlua::Result<()> {
         fields
             .document("Name to use in with the greeting method")
             .add_field("name", "mlua-extras")?;
@@ -30,13 +30,13 @@ impl TypedModule for Test {
         Ok(())
     }
 
-    fn add_methods<'lua, M: TypedModuleMethods<'lua>>(methods: &mut M) -> mlua::Result<()> {
+    fn add_methods<M: TypedModuleMethods>(methods: &mut M) -> mlua::Result<()> {
         methods
             .document("Greet the table's `name` field")
             // TODO: Add `add_method_with` and associated methods to add docs for params and
             // returns right away
             .add_method("greet", |_lua, this, ()| {
-                let name = this.get::<_, String>("name")?;
+                let name = this.get::<String>("name")?;
                 println!("Hello, {name}!");
                 Ok(())
             })?;
@@ -55,9 +55,9 @@ fn main() -> mlua::Result<()> {
     println!("{test_mod:#?}");
 
     if let Err(err) = lua.load(r#"
-test.name = "Zachary"
+test.name = "Tired-Fox"
 test:greet()
-test.nested.hello("Zachary")
+test.nested.hello("Tired-Fox")
 "#).eval::<mlua::Value>() {
         eprintln!("{err}");
     }
