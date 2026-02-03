@@ -239,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "mlua-extras-derive"
-version = "0.0.3"
+version = "11.6.0"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
