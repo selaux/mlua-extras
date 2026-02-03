@@ -55,9 +55,9 @@ fn main() -> mlua::Result<()> {
     println!("{test_mod:#?}");
 
     if let Err(err) = lua.load(r#"
-test.name = "Tired-Fox"
+test.name = "mlua"
 test:greet()
-test.nested.hello("Tired-Fox")
+test.nested.hello("mlua")
 "#).eval::<mlua::Value>() {
         eprintln!("{err}");
     }
