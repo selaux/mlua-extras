@@ -137,62 +137,62 @@ pub trait LuaExtras {
     fn set_cpaths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>) -> mlua::Result<()>;
 
     /// Set a global variable
-    fn set_global<'lua, K, V>(&'lua self, key: K, value: V) -> mlua::Result<()>
+    fn set_global<K, V>(&self, key: K, value: V) -> mlua::Result<()>
     where
-        K: IntoLua<'lua>,
-        V: IntoLua<'lua>;
+        K: IntoLua,
+        V: IntoLua;
 
-    fn set_global_function<'lua, K, A, R, F>(&'lua self, key: K, value: F) -> mlua::Result<()>
+    fn set_global_function<K, A, R, F>(&self, key: K, value: F) -> mlua::Result<()>
     where
-        K: IntoLua<'lua>,
-        A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
-        F: Fn(&'lua Lua, A) -> mlua::Result<R> + Send + 'static;
+        K: IntoLua,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+        F: Fn(&Lua, A) -> mlua::Result<R> + Send + 'static;
 
     /// Fetch a nested lua value starting from lua's globals
-    fn require<'lua, R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R>;
+    fn require<R: FromLua>(&self, path: impl AsRef<str>) -> mlua::Result<R>;
 }
 
 impl LuaExtras for Lua {
-    fn set_global<'lua, K, V>(&'lua self, key: K, value: V) -> mlua::Result<()>
+    fn set_global<K, V>(&self, key: K, value: V) -> mlua::Result<()>
     where
-        K: IntoLua<'lua>,
-        V: IntoLua<'lua>,
+        K: IntoLua,
+        V: IntoLua,
     {
         self.globals().set(key, value)
     }
 
-    fn set_global_function<'lua, K, A, R, F>(&'lua self, key: K, value: F) -> mlua::Result<()>
+    fn set_global_function<K, A, R, F>(&self, key: K, value: F) -> mlua::Result<()>
     where
-        K: IntoLua<'lua>,
-        A: FromLuaMulti<'lua>,
-        R: IntoLuaMulti<'lua>,
-        F: Fn(&'lua Lua, A) -> mlua::Result<R> + Send + 'static,
+        K: IntoLua,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+        F: Fn(&Lua, A) -> mlua::Result<R> + Send + 'static,
     {
         self.globals().set(key, self.create_function(value)?)
     }
 
     fn path(&self) -> mlua::Result<String> {
         self.globals()
-            .get::<_, Table>("package")?
-            .get::<_, String>("path")
+            .get::<Table>("package")?
+            .get::<String>("path")
     }
 
     fn cpath(&self) -> mlua::Result<String> {
         self.globals()
-            .get::<_, Table>("package")?
-            .get::<_, String>("cpath")
+            .get::<Table>("package")?
+            .get::<String>("cpath")
     }
 
     fn set_path<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()> {
         self.globals()
-            .get::<_, Table>("package")
+            .get::<Table>("package")
             .unwrap()
             .set("path", path.as_ref().display().to_string())
     }
 
     fn set_paths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>) -> mlua::Result<()> {
-        self.globals().get::<_, Table>("package").unwrap().set(
+        self.globals().get::<Table>("package").unwrap().set(
             "path",
             paths
                 .into_iter()
@@ -208,7 +208,7 @@ impl LuaExtras for Lua {
             other => format!("{};{other}", path.as_ref().display()),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("path", lua_path)
     }
 
@@ -226,7 +226,7 @@ impl LuaExtras for Lua {
             other => format!("{new};{other}"),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("path", lua_path)
     }
 
@@ -236,7 +236,7 @@ impl LuaExtras for Lua {
             other => format!("{other};{}", path.as_ref().display()),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("path", lua_path)
     }
 
@@ -251,19 +251,19 @@ impl LuaExtras for Lua {
             other => format!("{other};{new}"),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("path", lua_path)
     }
 
     fn set_cpath<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()> {
         self.globals()
-            .get::<_, Table>("package")
+            .get::<Table>("package")
             .unwrap()
             .set("cpath", path.as_ref().display().to_string())
     }
 
     fn set_cpaths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>) -> mlua::Result<()> {
-        self.globals().get::<_, Table>("package").unwrap().set(
+        self.globals().get::<Table>("package").unwrap().set(
             "cpath",
             paths
                 .into_iter()
@@ -279,7 +279,7 @@ impl LuaExtras for Lua {
             other => format!("{};{other}", path.as_ref().display()),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("cpath", lua_path)
     }
 
@@ -297,7 +297,7 @@ impl LuaExtras for Lua {
             other => format!("{new};{other}"),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("cpath", lua_path)
     }
 
@@ -307,7 +307,7 @@ impl LuaExtras for Lua {
             other => format!("{other};{}", path.as_ref().display()),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("cpath", lua_path)
     }
 
@@ -325,11 +325,11 @@ impl LuaExtras for Lua {
             other => format!("{other};{new}"),
         };
         self.globals()
-            .get::<_, Table>("package")?
+            .get::<Table>("package")?
             .set("cpath", lua_path)
     }
 
-    fn require<'lua, R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R> {
+    fn require<R: FromLua>(&self, path: impl AsRef<str>) -> mlua::Result<R> {
         let segments = path
             .as_ref()
             .split('.')
@@ -339,12 +339,12 @@ impl LuaExtras for Lua {
         let mut module = self.globals();
         if !segments.is_empty() {
             for seg in &segments[..segments.len() - 1] {
-                module = module.get::<_, Table>(*seg)?;
+                module = module.get::<Table>(*seg)?;
             }
         }
 
         match segments.last() {
-            Some(seg) => module.get::<_, R>(*seg),
+            Some(seg) => module.get::<R>(*seg),
             None => Err(mlua::Error::runtime(format!(
                 "module not found: {:?}",
                 path.as_ref()
@@ -354,48 +354,50 @@ impl LuaExtras for Lua {
 }
 
 /// Helper that combines some of the assignments of fields for UserData
-pub trait UserDataGetSet<'lua, T> {
+pub trait UserDataGetSet<T> {
     /// Combination of [add_field_method_get](mlua::UserDataFields::add_field_method_get) and [add_field_method_set](mlua::UserDataFields::add_field_method_set)
-    fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+    fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: S, get: GET, set: SET)
     where
-        S: AsRef<str> + ?Sized,
-        R: IntoLua<'lua>,
-        A: FromLua<'lua>,
-        GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
-        SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>;
+        S: Into<String>,
+        R: IntoLua,
+        A: FromLua,
+        GET: 'static + MaybeSend + Fn(&Lua, &T) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&Lua, &mut T, A) -> mlua::Result<()>;
 
     /// Typed version of [add_field_function_get](mlua::UserDataFields::add_field_function_get) and [add_field_function_set](mlua::UserDataFields::add_field_function_set) combined
-    fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+    fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: S, get: GET, set: SET)
     where
-        S: AsRef<str> + ?Sized,
-        R: IntoLua<'lua>,
-        A: FromLua<'lua>,
-        GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
-        SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>;
+        S: Into<String>,
+        R: IntoLua,
+        A: FromLua,
+        GET: 'static + MaybeSend + Fn(&Lua, AnyUserData) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&Lua, AnyUserData, A) -> mlua::Result<()>;
 }
 
-impl<'lua, T, U: UserDataFields<'lua, T>> UserDataGetSet<'lua, T> for U {
-    fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+impl<T, U: UserDataFields<T>> UserDataGetSet<T> for U {
+    fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: S, get: GET, set: SET)
     where
-        S: AsRef<str> + ?Sized,
-        R: IntoLua<'lua>,
-        A: FromLua<'lua>,
-        GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
-        SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>,
+        S: Into<String>,
+        R: IntoLua,
+        A: FromLua,
+        GET: Fn(&Lua, &T) -> mlua::Result<R> + MaybeSend + 'static,
+        SET: Fn(&Lua, &mut T, A) -> mlua::Result<()> + MaybeSend + 'static,
     {
-        self.add_field_method_get(name, get);
+        let name: String = name.into();
+        self.add_field_method_get(&name, get);
         self.add_field_method_set(name, set);
     }
 
-    fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+    fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: S, get: GET, set: SET)
     where
-        S: AsRef<str> + ?Sized,
-        R: IntoLua<'lua>,
-        A: FromLua<'lua>,
-        GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
-        SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>,
+        S: Into<String>,
+        R: IntoLua,
+        A: FromLua,
+        GET: Fn(&Lua, AnyUserData) -> mlua::Result<R> + MaybeSend + 'static,
+        SET: Fn(&Lua, AnyUserData, A) -> mlua::Result<()> + MaybeSend + 'static,
     {
-        self.add_field_function_get(name, get);
+        let name: String = name.into();
+        self.add_field_function_get(&name, get);
         self.add_field_function_set(name, set);
     }
 }

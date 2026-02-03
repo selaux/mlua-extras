@@ -5,11 +5,11 @@ use mlua_extras::{
 
 struct MyModule;
 impl UserData for MyModule {
-    fn add_fields<'lua, F: mlua::prelude::LuaUserDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<F: mlua::prelude::LuaUserDataFields<Self>>(fields: &mut F) {
         fields.add_field("data", "Some Data");
     }
 
-    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: mlua::prelude::LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_function("print", |_lua, values: Variadic<Value>| {
             println!(
                 "{}",
@@ -28,9 +28,6 @@ const CODE: &str = r#"data = {
     first = "key",
     second = "value"
 }
-
-print("KEYS: ", table.unpack(table.keys(data)))
-print("VALUES: ", table.unpack(table.values(data)))
 
 mymodule.print(mymodule.data)
 "#;

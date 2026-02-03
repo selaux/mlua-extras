@@ -78,18 +78,19 @@ impl_static_typed! {
     u8 | u16 | u32 | u64 | usize | u128 | i8 | i16 | i32 | i64 | isize | i128 => "integer",
     f32 | f64 => "number",
     bool => "boolean",
+
+    mlua::Function => "fun()",
+    mlua::Table => "table",
+    mlua::AnyUserData => "userdata",
+    mlua::String => "string",
+    mlua::Thread => "thread",
 }
 
 impl_static_typed_generic! {
     for<'a> Cow<'a, str> => "string",
-    for<'lua> mlua::Function<'lua> => "fun()",
-    for<'lua> mlua::Table<'lua> => "table",
-    for<'lua> mlua::AnyUserData<'lua> => "userdata",
-    for<'lua> mlua::String<'lua> => "string",
-    for<'lua> mlua::Thread<'lua> => "thread",
 }
 
-impl<'lua> Typed for mlua::Value<'lua> {
+impl Typed for mlua::Value {
     fn ty() -> Type {
         Type::Single("any".into())
     }
@@ -242,8 +243,8 @@ impl std::fmt::Display for Index {
     }
 }
 
-impl<'lua> IntoLua<'lua> for Index {
-    fn into_lua(self, lua: &'lua mlua::Lua) -> mlua::prelude::LuaResult<Value<'lua>> {
+impl IntoLua for Index {
+    fn into_lua(self, lua: &mlua::Lua) -> mlua::prelude::LuaResult<Value> {
         match self {
             Self::Int(num) => Ok(mlua::Value::Integer(num as mlua::Integer)),
             Self::Str(val) => val.into_lua(lua)

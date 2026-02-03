@@ -86,23 +86,13 @@ where
     }
 
     /// Update a parameter's information given it's position in the argument list
-    pub fn param<F>(&mut self, index: usize, generator: F)
-    where
-        F: Fn(&mut Param),
-    {
-        if let Some(param) = self.params.get_mut(index) {
-            generator(param);
-        }
+    pub fn param(&mut self, index: usize) -> Option<&mut Param> {
+        self.params.get_mut(index)
     }
 
     /// Update a return type's information given it's position in the return list
-    pub fn ret<F>(&mut self, index: usize, generator: F)
-    where
-        F: Fn(&mut Return),
-    {
-        if let Some(ret) = self.returns.get_mut(index) {
-            generator(ret);
-        }
+    pub fn ret(&mut self, index: usize) -> Option<&mut Return> {
+        self.returns.get_mut(index)
     }
 }
 
@@ -113,10 +103,10 @@ pub struct DefinitionBuilder {
 }
 impl DefinitionBuilder {
     /// Register a definition entry that is a function type
-    pub fn function<'lua, Params, Returns>(
+    pub fn function<Params, Returns>(
         mut self,
         name: impl std::fmt::Display,
-        _: impl IntoTypedFunction<'lua, Params, Returns>,
+        _: impl IntoTypedFunction<Params, Returns>,
     ) -> Self
     where
         Params: TypedMultiValue,
@@ -130,10 +120,10 @@ impl DefinitionBuilder {
     /// Register a definition entry that is a function type
     ///
     /// Also add additional documentation
-    pub fn function_with<'lua, Params, Returns, F>(
+    pub fn function_with<Params, Returns, F>(
         mut self,
         name: impl std::fmt::Display,
-        _: impl IntoTypedFunction<'lua, Params, Returns>,
+        _: impl IntoTypedFunction<Params, Returns>,
         generator: F,
     ) -> Self
     where
@@ -230,7 +220,7 @@ impl DefinitionBuilder {
     ///         docs.add("This is an example");
     ///     }
     ///     
-    ///     fn add_fields<'lua, F: TypedDataFields<'lua, Self>>(fields: &mut F) {
+    ///     fn add_fields<F: TypedDataFields<Self>>(fields: &mut F) {
     ///         fields
     ///             .document("Example field")
     ///             .add_field_method_get_set(

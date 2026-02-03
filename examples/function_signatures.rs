@@ -8,7 +8,7 @@ use mlua_extras::{
 
 struct MyModule;
 impl TypedModule for MyModule {
-    fn add_methods<'lua, M: TypedModuleMethods<'lua>>(methods: &mut M) -> mlua::Result<()> {
+    fn add_methods<M: TypedModuleMethods>(methods: &mut M) -> mlua::Result<()> {
         // Add a function with a robust signature
         methods
             .document("A function with a robust signature")
@@ -21,31 +21,23 @@ impl TypedModule for MyModule {
                     Ok(())
                 },
                 |func| {
-                    func.param(0, |param| {
-                        param.name("p_number").doc("Some number").ty(Type::number());
-                    });
-                    func.param(1, |param| {
-                        param.name("p_bool").doc("Some boolean").ty(Type::boolean());
-                    });
-                    func.param(2, |param| {
-                        param
-                            .name("p_integer")
-                            .doc("Somer integer")
-                            .ty(Type::integer());
-                    });
-                    func.param(3, |param| {
-                        param.name("p_string").doc("Some string").ty(Type::string());
-                    });
-                    func.param(4, |param| {
-                        param
-                            .name("p_vec4")
-                            .doc("A four value tuple of numbers, effectively a Vector3")
-                            .ty(Type::tuple([
-                                Type::number(),
-                                Type::number(),
-                                Type::number(),
-                            ]));
-                    });
+                    func.param(0).unwrap().name("p_number").doc("Some number").ty(Type::number());
+                    func.param(1).unwrap().name("p_bool").doc("Some boolean").ty(Type::boolean());
+                    func.param(2)
+                        .unwrap()
+                        .name("p_integer")
+                        .doc("Somer integer")
+                        .ty(Type::integer());
+                    func.param(3).unwrap().name("p_string").doc("Some string").ty(Type::string());
+                    func.param(4)
+                        .unwrap()
+                        .name("p_vec4")
+                        .doc("A four value tuple of numbers, effectively a Vector3")
+                        .ty(Type::tuple([
+                            Type::number(),
+                            Type::number(),
+                            Type::number(),
+                        ]));
                 },
             )?;
         // add a method that takes no parameters

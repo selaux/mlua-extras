@@ -20,13 +20,13 @@ use mlua::{Error, FromLua, Table};
 /// ```lua
 /// local unpack = require("table").unpack
 /// ```
-pub trait Require<'lua> {
+pub trait Require {
     /// Fetch a nested lua value from the table
-    fn require<R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R>;
+    fn require<R: FromLua>(&self, path: impl AsRef<str>) -> mlua::Result<R>;
 }
 
-impl<'lua> Require<'lua> for Table<'lua> {
-    fn require<R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R> {
+impl Require for Table {
+    fn require<R: FromLua>(&self, path: impl AsRef<str>) -> mlua::Result<R> {
         let segments = path
             .as_ref()
             .split('.')
@@ -36,12 +36,12 @@ impl<'lua> Require<'lua> for Table<'lua> {
         let mut module = self.clone();
         if !segments.is_empty() {
             for seg in &segments[..segments.len() - 1] {
-                module = module.get::<_, Table>(*seg)?;
+                module = module.get::<Table>(*seg)?;
             }
         }
 
         match segments.last() {
-            Some(seg) => module.get::<_, R>(*seg),
+            Some(seg) => module.get::<R>(*seg),
             None => Err(Error::runtime(format!(
                 "module not found: {:?}",
                 path.as_ref()
