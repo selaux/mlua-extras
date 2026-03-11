@@ -39,25 +39,9 @@ mlua = { version = "0.11.6", optional = true, default-features = false }
 strum = { version = "0.27.2", features = ["derive"], default-features = false }
 
 [[example]]
-name = "macros"
-required-features = ["mlua"]
-
-[[example]]
 name = "path"
 required-features = ["mlua"]
 
 [[example]]
-name = "require"
-required-features = ["mlua"]
-
-[[example]]
 name = "typed"
-required-features = ["mlua", "derive", "serialize"]
-
-[[example]]
-name="function_signatures"
-required-features = ["mlua"]
-
-[[example]]
-name = "typed_v2"
 required-features = ["mlua", "derive", "serialize"]

@@ -1,9 +1,13 @@
 use std::{
-    borrow::Cow, marker::PhantomData, slice::{Iter, IterMut}, vec::IntoIter
+    borrow::Cow,
+    marker::PhantomData,
+    slice::{Iter, IterMut},
+    vec::IntoIter,
 };
 
 use super::{
-    function::{IntoTypedFunction, Return}, Param, Type, Typed, TypedModule, TypedModuleBuilder, TypedMultiValue
+    function::{IntoTypedFunction, Return},
+    Param, Type, Typed, TypedMultiValue,
 };
 
 mod type_file;
@@ -100,8 +104,29 @@ where
 #[derive(Default, Debug, Clone)]
 pub struct DefinitionBuilder {
     pub entries: Vec<Entry>,
+    pub queued_params: Vec<(String, String)>,
+    pub queued_returns: Vec<String>,
+    pub queued_doc: Option<String>,
 }
 impl DefinitionBuilder {
+    /// Queue a doc comment for the next function call
+    pub fn document(mut self, doc: impl std::fmt::Display) -> Self {
+        self.queued_doc.replace(doc.to_string());
+        self
+    }
+
+    /// Queue a param for the next function call
+    pub fn param(mut self, name: impl std::fmt::Display, doc: impl std::fmt::Display) -> Self {
+        self.queued_params.push((name.to_string(), doc.to_string()));
+        self
+    }
+
+    /// Queue a return for the next function call
+    pub fn ret(mut self, doc: impl std::fmt::Display) -> Self {
+        self.queued_returns.push(doc.to_string());
+        self
+    }
+
     /// Register a definition entry that is a function type
     pub fn function<Params, Returns>(
         mut self,
@@ -112,34 +137,13 @@ impl DefinitionBuilder {
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.entries
-            .push(Entry::new(name, Type::function::<Params, Returns>()));
-        self
-    }
-
-    /// Register a definition entry that is a function type
-    ///
-    /// Also add additional documentation
-    pub fn function_with<Params, Returns, F>(
-        mut self,
-        name: impl std::fmt::Display,
-        _: impl IntoTypedFunction<Params, Returns>,
-        generator: F,
-    ) -> Self
-    where
-        Params: TypedMultiValue,
-        Returns: TypedMultiValue,
-        F: Fn(&mut FunctionBuilder<Params, Returns>),
-    {
-        let mut func = FunctionBuilder::<Params, Returns>::default();
-        generator(&mut func);
         self.entries.push(Entry::new_with(
             name,
-            Type::Function {
-                params: func.params,
-                returns: func.returns,
-            },
-            func.doc,
+            Type::function::<Params, Returns>(
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+            self.queued_doc.take()
         ));
         self
     }
@@ -149,13 +153,10 @@ impl DefinitionBuilder {
         let ty = T::ty();
         let ty = match &ty {
             Type::Class(_) | Type::Enum(_) => ty,
-            _ => Type::alias(ty)
+            _ => Type::alias(ty),
         };
 
-        self.entries.push(Entry::new(
-            name.into(),
-            ty.into(),
-        ));
+        self.entries.push(Entry::new(name.into(), ty.into()));
         self
     }
 
@@ -164,41 +165,10 @@ impl DefinitionBuilder {
         let ty = ty.into();
         let ty = match &ty {
             Type::Class(_) | Type::Enum(_) => ty,
-            _ => Type::alias(ty)
+            _ => Type::alias(ty),
         };
 
-        self.entries.push(Entry::new(
-            name.into(),
-            ty.into(),
-        ));
-        self
-    }
-
-    /// Register a definition entry that is a class type
-    ///
-    /// The name of the class is the same as the name of the type passed
-    pub fn module<T: TypedModule>(mut self, name: impl std::fmt::Display) -> Self {
-        let name = name.to_string();
-        self.entries.push(Entry::new(
-            name,
-            // PERF: Ensure that the builder doesn't need it's error bubbled up another layer
-            Type::module(TypedModuleBuilder::new::<T>().unwrap()),
-        ));
-        self
-    }
-
-    /// Same as [`module`][DefinitionBuilder::module] but with additional docs
-    pub fn module_with<T: TypedModule, S: std::fmt::Display>(
-        mut self,
-        name: impl std::fmt::Display,
-        doc: Option<S>,
-    ) -> Self {
-        self.entries.push(Entry::new_with(
-            name,
-            // PERF: Ensure that the builder doesn't need it's error bubbled up another layer
-            Type::module(TypedModuleBuilder::new::<T>().unwrap()),
-            doc,
-        ));
+        self.entries.push(Entry::new(name.into(), ty.into()));
         self
     }
 

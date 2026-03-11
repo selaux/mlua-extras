@@ -2,12 +2,9 @@ use std::path::Path;
 
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table, UserDataFields};
 
-mod macros;
 mod module;
-mod require;
 
 pub use module::{LuaModule, Module, ModuleBuilder, ModuleFields, ModuleMethods, ExtendModule};
-pub use require::Require;
 
 use crate::MaybeSend;
 
@@ -17,7 +14,6 @@ use crate::MaybeSend;
 /// - [`path`](https://www.lua.org/manual/5.1/manual.html#pdf-package.path) and [`cpath`](https://www.lua.org/manual/5.1/manual.html#pdf-package.cpath) manipulation
 /// - Shorthand for `lua.globals().set` that include adding any value and adding rust functions
 ///     skipping [`create_function`][mlua::Lua::create_function]
-/// - A `require` method that is similar to the [`Require`] traits. Allows for `lua` style [`require`](https://www.lua.org/manual/5.1/manual.html#pdf-require)
 pub trait LuaExtras {
     /// Get the `package.path` value
     ///
@@ -148,9 +144,6 @@ pub trait LuaExtras {
         A: FromLuaMulti,
         R: IntoLuaMulti,
         F: Fn(&Lua, A) -> mlua::Result<R> + Send + 'static;
-
-    /// Fetch a nested lua value starting from lua's globals
-    fn require<R: FromLua>(&self, path: impl AsRef<str>) -> mlua::Result<R>;
 }
 
 impl LuaExtras for Lua {
@@ -302,7 +295,7 @@ impl LuaExtras for Lua {
     }
 
     fn append_cpath<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()> {
-        let lua_path = match self.path()?.trim() {
+        let lua_path = match self.cpath()?.trim() {
             "" => path.as_ref().display().to_string(),
             other => format!("{other};{}", path.as_ref().display()),
         };
@@ -327,29 +320,6 @@ impl LuaExtras for Lua {
         self.globals()
             .get::<Table>("package")?
             .set("cpath", lua_path)
-    }
-
-    fn require<R: FromLua>(&self, path: impl AsRef<str>) -> mlua::Result<R> {
-        let segments = path
-            .as_ref()
-            .split('.')
-            .filter_map(|v| (!v.is_empty()).then_some(v.trim()))
-            .collect::<Vec<_>>();
-
-        let mut module = self.globals();
-        if !segments.is_empty() {
-            for seg in &segments[..segments.len() - 1] {
-                module = module.get::<Table>(*seg)?;
-            }
-        }
-
-        match segments.last() {
-            Some(seg) => module.get::<R>(*seg),
-            None => Err(mlua::Error::runtime(format!(
-                "module not found: {:?}",
-                path.as_ref()
-            ))),
-        }
     }
 }
 

@@ -35,9 +35,9 @@ local _CLASS_Example_ = {
 --- @type Example
 example = nil
 
---- @param param0 string 
-function greet(param0) end
+--- @param name string Name of the person to greet
+function greet(name) end
 
---- @param param0 Color 
-function printColor(param0) end
+--- @param color Color Color to print to stdout
+function printColor(color) end
 

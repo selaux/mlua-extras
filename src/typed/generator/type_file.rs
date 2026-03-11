@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::Path, slice::Iter};
 
-use crate::typed::{function::Return, Param, Type, TypedModuleBuilder};
+use crate::typed::{function::Return, Param, Type};
 
 use super::{Definition, Definitions};
 
@@ -281,18 +281,6 @@ impl<'writer> DefinitionWriter<'writer> {
                         .join("\n")
                     )?;
                 }
-                Type::Module(module) => {
-                    if let Some(docs) =
-                        self.accumulate_docs(&[definition.doc.as_deref(), module.doc.as_deref()])
-                    {
-                        writeln!(buffer, "{}", docs.join("\n"))?;
-                    }
-
-                    write!(buffer, "{} = ", definition.name)?;
-                    let mut path = Vec::new();
-                    self.write_module(&mut buffer, module, &mut path)?;
-                    writeln!(buffer)?;
-                },
                 other => {
                     return Err(mlua::Error::runtime(format!(
                         "invalid root level type: {:?}",
@@ -493,115 +481,6 @@ impl<'writer> DefinitionWriter<'writer> {
                 .flat_map(|v| v.split('\n').map(|v| format!("--- {v}")))
                 .collect::<Vec<_>>()
         })
-    }
-
-    fn write_module<B: std::io::Write>(&self, buffer: &mut B, module: &TypedModuleBuilder, path: &mut Vec<String>) -> mlua::Result<()> {
-        let indent = path.len()*2;
-        let current_offset = (0..indent).map(|_| ' ').collect::<String>();
-        let single_offset = (0..indent+2).map(|_| ' ').collect::<String>();
-
-        if module.is_empty() {
-            write!(buffer, "{{}}")?;
-            return Ok(())
-        } else {
-            writeln!(buffer, "{{")?;
-        }
-
-        for (name, field) in module.fields.iter() {
-            if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
-                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
-            }
-
-            match &field.ty {
-                &Type::Module(ref module) => {
-                    write!(buffer, "{single_offset}{name} = ")?;
-                    path.push(name.to_string());
-                    self.write_module(buffer, module, path)?;
-                    path.pop();
-                    writeln!(buffer, ",")?;
-                },
-                other => {
-                    writeln!(buffer, "{single_offset}--- @type {}", self.type_signature(other)?)?;
-                    writeln!(buffer, "{single_offset}{name} = nil,")?
-                },
-            }
-        }
-
-        for (name, nested) in module.nested_modules.iter() {
-            if let Some(docs) = self.accumulate_docs(&[nested.doc.as_deref()]) {
-                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
-            }
-
-            write!(buffer, "{single_offset}{name} = ")?;
-            path.push(name.to_string());
-            self.write_module(buffer, nested, path)?;
-            path.pop();
-            writeln!(buffer, ",")?;
-        }
-
-        for (name, func) in module.functions.iter() {
-            if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
-            }
-
-            writeln!(buffer, "{single_offset}{},", self.function_signature(name, &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
-        }
-
-        for (name, func) in module.methods.iter() {
-            if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
-            }
-
-            writeln!(buffer, "{single_offset}{},", self.method_signature(name, "table".into(), &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
-        }
-
-        if !module.is_meta_empty() {
-            writeln!(buffer, "{single_offset}__metatable = {{")?;
-
-            let double_offset = (0..indent+4).map(|_| ' ').collect::<String>();
-
-            for (name, field) in module.meta_fields.iter() {
-                if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
-                    writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
-                }
-
-                match &field.ty {
-                    &Type::Module(ref module) => {
-                        write!(buffer, "{double_offset}{name} = ")?;
-                        path.push(name.to_string());
-                        self.write_module(buffer, module, path)?;
-                        path.pop();
-                        writeln!(buffer, ",")?;
-                    },
-                    other => {
-                        writeln!(buffer, "{double_offset}--- @type {}", self.type_signature(other)?)?;
-                        writeln!(buffer, "{double_offset}{name} = nil,")?
-                    },
-                }
-            }
-
-            for (name, func) in module.meta_functions.iter() {
-                if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                    writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{double_offset}").as_str()))?;
-                }
-
-                writeln!(buffer, "{double_offset}{},", self.function_signature(name, &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
-            }
-
-            for (name, func) in module.meta_methods.iter() {
-                if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                    writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{double_offset}").as_str()))?;
-                }
-
-                writeln!(buffer, "{double_offset}{},", self.method_signature(name, "table".into(), &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
-            }
-
-            writeln!(buffer, "{single_offset}}},")?;
-        }
-
-        write!(buffer, "{current_offset}}}")?;
-
-        Ok(())
     }
 }
 
