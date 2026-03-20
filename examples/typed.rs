@@ -118,6 +118,7 @@ impl TypedUserData for Example {
     fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
         methods
             .document("print all items")
+            .param("...", "")
             .add_function(
                 "printAll",
                 |_lua, all: Variadic<String>| {

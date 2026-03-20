@@ -109,7 +109,7 @@ pub struct DefinitionBuilder {
     pub queued_doc: Option<String>,
 }
 impl DefinitionBuilder {
-    /// Queue a doc comment for the next function call
+    /// Queue a doc comment for the next function call or value definition
     pub fn document(mut self, doc: impl std::fmt::Display) -> Self {
         self.queued_doc.replace(doc.to_string());
         self
@@ -224,19 +224,7 @@ impl DefinitionBuilder {
     /// example = nil
     /// ```
     pub fn value<T: Typed>(mut self, name: impl std::fmt::Display) -> Self {
-        self.entries
-            .push(Entry::new(name, Type::Value(Box::new(T::ty()))));
-        self
-    }
-
-    /// Same as [`value`][DefinitionBuilder::value] but with additional docs
-    pub fn value_with<T: Typed, S: std::fmt::Display>(
-        mut self,
-        name: impl std::fmt::Display,
-        doc: Option<S>,
-    ) -> Self {
-        self.entries
-            .push(Entry::new_with(name, Type::Value(Box::new(T::ty())), doc));
+        self.entries.push(Entry::new_with(name, Type::Value(Box::new(T::ty())), self.queued_doc.take()));
         self
     }
 
