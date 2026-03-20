@@ -23,8 +23,8 @@ local _CLASS_Example_ = {
   --- @param ... any Arguments to pass to the formatter.
   LogAny = function(format, ...) end,
   --- print all items
-  --- @param param0 any 
-  printAll = function(param0) end,
+  --- @param ... any 
+  printAll = function(...) end,
   __metatable = {
     --- @param self Example
     --- @return string 

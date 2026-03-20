@@ -97,11 +97,7 @@ fn main() -> mlua::Result<()> {
     lua.prepend_path("?.lua")?;
 
     let temp = lua.create_table()?;
-    function! {
-        lua fn temp.name(lua) {
-            Ok("name")
-        }
-    }
+    temp.set("name", "MluaExtras")?;
 
     // Get a nested function: `table.unpack`
     let unpack = lua.require::<TypedFunction<Table, Variadic<Value>>>("table.unpack")?;
