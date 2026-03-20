@@ -2,12 +2,10 @@ mod function;
 pub mod generator;
 
 mod class;
-mod module;
 
 pub use class::{
     TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedDataDocumentation, TypedUserData, WrappedBuilder,
 };
-pub use module::{TypedModule, TypedModuleBuilder, TypedModuleFields, TypedModuleMethods};
 
 use std::{
     borrow::Cow, cell::{Cell, RefCell}, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData, rc::Rc, sync::{Arc, Mutex}
@@ -389,25 +387,6 @@ pub enum Type {
     /// --- @field height number
     /// ```
     Class(Box<TypedClassBuilder>),
-    /// Represents a global table (module)
-    ///
-    /// # Example
-    ///
-    /// ```lua
-    /// module = {
-    ///     data = nil,
-    ///     method = function(self) end,
-    /// }
-    /// ````
-    ///
-    /// or flattened
-    ///
-    /// ```lua
-    /// module = {}
-    /// function module:method() end
-    /// module.data = nil
-    /// ```
-    Module(Box<TypedModuleBuilder>),
 }
 
 /// Allows to union types
@@ -553,18 +532,28 @@ impl Type {
         Self::Class(Box::new(class))
     }
 
-    /// create a type that is a global module
-    pub fn module(module: TypedModuleBuilder) -> Self {
-        Self::Module(Box::new(module))
-    }
-
     /// create a type that is a function. i.e. `fun(self): number`
-    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>() -> Self {
+    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>(params: Vec<(String, String)>, returns: Vec<String>) -> Self {
         Self::Function {
-            params: Params::get_types_as_params(),
-            returns: Response::get_types()
+            params: Params::get_types_as_params()
                 .into_iter()
-                .map(|ty| Return { doc: None, ty })
+                .enumerate()
+                .map(|(i, mut v)| {
+                    if let Some((name, doc)) = params.get(i) {
+                        v.name(name.clone()).doc(doc.as_str());
+                    }
+                    v
+                })
+                .collect(),
+            returns: Response::get_types_as_returns()
+                .into_iter()
+                .enumerate()
+                .map(|(i, mut v)| {
+                    if let Some(doc) = returns.get(i) {
+                        v.doc(doc.as_str());
+                    }
+                    v
+                })
                 .collect(),
         }
     }
@@ -726,14 +715,32 @@ pub struct Func {
 }
 
 impl Func {
-    pub fn new<Params, Returns>(doc: impl IntoDocComment) -> Self
+    pub fn new<Params, Returns>(doc: impl IntoDocComment, params: Vec<(String, String)>, returns: Vec<String>) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
         Self {
-            params: Params::get_types_as_params(),
-            returns: Returns::get_types_as_returns(),
+            params: Params::get_types_as_params()
+                .into_iter()
+                .enumerate()
+                .map(|(i, mut v)| {
+                    if let Some((name, doc)) = params.get(i) {
+                        v.name(name.clone()).doc(doc.as_str());
+                    }
+                    v
+                })
+                .collect(),
+            returns: Returns::get_types_as_returns()
+                .into_iter()
+                .enumerate()
+                .map(|(i, mut v)| {
+                    if let Some(doc) = returns.get(i) {
+                        v.doc(doc.as_str());
+                    }
+                    v
+                })
+                .collect(),
             doc: doc.into_doc_comment()
         }
     }

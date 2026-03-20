@@ -23,6 +23,11 @@ fn main() -> mlua::Result<()> {
     lua.append_cpath(PathBuf::from("examples").join("?.dll"))?;
     lua.append_cpath(PathBuf::from("examples").join("?.lib"))?;
 
+    lua.load(r#"
+    print(package.path, '\n')
+    print(package.cpath, '\n')
+    "#).eval::<()>()?;
+
     // Set globals in with shorthand helpers
     lua.set_global("key", "value")?;
     lua.set_global_function("hello", |_lua, _: ()| {
@@ -30,7 +35,7 @@ fn main() -> mlua::Result<()> {
         Ok(())
     })?;
 
-    // long hand
+    // long way
     lua.globals().set("key", "value")?;
     lua.globals().set(
         "hello",

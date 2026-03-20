@@ -1,16 +1,24 @@
-use std::{any::Any, borrow::Cow, collections::BTreeMap};
+use std::{borrow::Cow, collections::BTreeMap};
 
-use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, MetaMethod};
+use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 
-use crate::{typed::{function::Return, generator::FunctionBuilder, Field, Func, Index, IntoDocComment, Type}, MaybeSend};
+use crate::{
+    typed::{Field, Func, Index, IntoDocComment, Type},
+    MaybeSend,
+};
 
-use super::{Typed, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedMultiValue, TypedUserData};
+use super::{
+    Typed, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedMultiValue,
+    TypedUserData,
+};
 
 /// Type information for a lua `class`. This happens to be a [`TypedUserData`]
 #[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct TypedClassBuilder {
     pub type_doc: Option<Cow<'static, str>>,
     queued_doc: Option<String>,
+    queued_params: Vec<(String, String)>,
+    queued_returns: Vec<String>,
 
     pub fields: BTreeMap<Index, Field>,
     pub static_fields: BTreeMap<Index, Field>,
@@ -74,48 +82,23 @@ impl TypedClassBuilder {
     ///     // Can use `None` instead of `()` for specifying the doc comment
     ///     .function::<String, ()>("hello", ())
     /// ```
-    pub fn function<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    pub fn function<Params, Returns>(
+        mut self,
+        key: impl Into<Index>,
+        doc: impl IntoDocComment,
+    ) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.functions.insert(key.into(), Func::new::<Params, Returns>(doc));
-        self
-    }
-
-    /// Same as [`function`][TypedClassBuilder::function] but with an extra generator function
-    /// parameter.
-    ///
-    /// This extra parameter allows for customization of parameter names, types, and doc comments
-    /// along with return types and doc comments.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mlua_extras::typed::{TypedClassBuilder, Type};
-    ///
-    /// TypedClassBuilder::default()
-    ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .function_with::<String, String>("getMessage", (), |func| {
-    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
-    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
-    ///     })
-    /// ```
-    pub fn function_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
-    where
-        Params: TypedMultiValue,
-        Returns: TypedMultiValue,
-        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
-        R: Any,
-    {
-        let mut builder = FunctionBuilder::default();
-        generator(&mut builder);
-
-        self.functions.insert(key.into(), Func {
-            params: builder.params,
-            returns: builder.returns,
-            doc: doc.into_doc_comment()
-        });
+        self.functions.insert(
+            key.into(),
+            Func::new::<Params, Returns>(
+                doc,
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+        );
         self
     }
 
@@ -134,48 +117,23 @@ impl TypedClassBuilder {
     ///     // Can use `None` instead of `()` for specifying the doc comment
     ///     .method::<String, ()>("hello", ())
     /// ```
-    pub fn method<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    pub fn method<Params, Returns>(
+        mut self,
+        key: impl Into<Index>,
+        doc: impl IntoDocComment,
+    ) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.methods.insert(key.into(), Func::new::<Params, Returns>(doc));
-        self
-    }
-
-    /// Same as [`method`][TypedClassBuilder::method] but with an extra generator function
-    /// parameter.
-    ///
-    /// This extra parameter allows for customization of parameter names, types, and doc comments
-    /// along with return types and doc comments.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mlua_extras::typed::{TypedClassBuilder, Type};
-    ///
-    /// TypedClassBuilder::default()
-    ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .method_with::<String, String>("getMessage", (), |func| {
-    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
-    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
-    ///     })
-    /// ```
-    pub fn method_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
-    where
-        Params: TypedMultiValue,
-        Returns: TypedMultiValue,
-        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
-        R: Any,
-    {
-        let mut builder = FunctionBuilder::default();
-        generator(&mut builder);
-
-        self.methods.insert(key.into(), Func {
-            params: builder.params,
-            returns: builder.returns,
-            doc: doc.into_doc_comment()
-        });
+        self.methods.insert(
+            key.into(),
+            Func::new::<Params, Returns>(
+                doc,
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+        );
         self
     }
 
@@ -210,48 +168,23 @@ impl TypedClassBuilder {
     ///     // Can use `None` instead of `()` for specifying the doc comment
     ///     .meta_function::<String, ()>("hello", ())
     /// ```
-    pub fn meta_function<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    pub fn meta_function<Params, Returns>(
+        mut self,
+        key: impl Into<Index>,
+        doc: impl IntoDocComment,
+    ) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.meta_functions.insert(key.into(), Func::new::<Params, Returns>(doc));
-        self
-    }
-
-    /// Same as [`meta_function`][TypedClassBuilder::meta_function] but with an extra generator function
-    /// parameter.
-    ///
-    /// This extra parameter allows for customization of parameter names, types, and doc comments
-    /// along with return types and doc comments.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mlua_extras::typed::{TypedClassBuilder, Type};
-    ///
-    /// TypedClassBuilder::default()
-    ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .meta_function_with::<String, String>("getMessage", (), |func| {
-    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
-    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
-    ///     })
-    /// ```
-    pub fn meta_function_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
-    where
-        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
-        R: Any,
-        Params: TypedMultiValue,
-        Returns: TypedMultiValue,
-    {
-        let mut builder = FunctionBuilder::default();
-        generator(&mut builder);
-
-        self.meta_functions.insert(key.into(), Func {
-            params: builder.params,
-            returns: builder.returns,
-            doc: doc.into_doc_comment()
-        });
+        self.meta_functions.insert(
+            key.into(),
+            Func::new::<Params, Returns>(
+                doc,
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+        );
         self
     }
 
@@ -272,48 +205,23 @@ impl TypedClassBuilder {
     ///     // Can use `None` instead of `()` for specifying the doc comment
     ///     .method::<String, ()>("hello", ())
     /// ```
-    pub fn meta_method<Params, Returns>(mut self, key: impl Into<Index>, doc: impl IntoDocComment) -> Self
+    pub fn meta_method<Params, Returns>(
+        mut self,
+        key: impl Into<Index>,
+        doc: impl IntoDocComment,
+    ) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.meta_methods.insert(key.into(), Func::new::<Params, Returns>(doc));
-        self
-    }
-
-    /// Same as [`meta_method`][TypedClassBuilder::meta_method] but with an extra generator function
-    /// parameter.
-    ///
-    /// This extra parameter allows for customization of parameter names, types, and doc comments
-    /// along with return types and doc comments.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mlua_extras::typed::{TypedClassBuilder, Type};
-    ///
-    /// TypedClassBuilder::default()
-    ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .meta_method_with::<String, String>("getMessage", (), |func| {
-    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
-    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
-    ///     })
-    /// ```
-    pub fn meta_method_with<Params, Returns, F, R>(mut self, key: impl Into<Index>, doc: impl IntoDocComment, generator: F) -> Self
-    where
-        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
-        R: Any,
-        Params: TypedMultiValue,
-        Returns: TypedMultiValue,
-    {
-        let mut builder = FunctionBuilder::default();
-        generator(&mut builder);
-
-        self.meta_methods.insert(key.into(), Func {
-            params: builder.params,
-            returns: builder.returns,
-            doc: doc.into_doc_comment()
-        });
+        self.meta_methods.insert(
+            key.into(),
+            Func::new::<Params, Returns>(
+                doc,
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+        );
         self
     }
 }
@@ -470,12 +378,29 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             });
     }
 
-    fn add_meta_field<R, F>(&mut self, meta: MetaMethod, _: F)
+    fn add_meta_field<V>(&mut self, meta: impl Into<String>, _: V)
     where
-        F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
-        R: IntoLua + Typed,
+        V: IntoLua + Typed + 'static,
     {
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
+        let name: Cow<'static, str> = meta.into().into();
+        self.meta_fields
+            .entry(name.into())
+            .and_modify(|v| {
+                v.doc = self.queued_doc.take().map(|v| v.into());
+                v.ty = v.ty.clone() | V::ty();
+            })
+            .or_insert(Field {
+                ty: V::ty(),
+                doc: self.queued_doc.take().map(|v| v.into()),
+            });
+    }
+
+    fn add_meta_field_with<R, F>(&mut self, meta: impl Into<String>, _: F)
+        where
+            F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
+            R: IntoLua + Typed {
+
+        let name: Cow<'static, str> = meta.into().into();
         self.meta_fields
             .entry(name.into())
             .and_modify(|v| {
@@ -495,6 +420,16 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         self
     }
 
+    fn param<S: std::fmt::Display, D: std::fmt::Display>(&mut self, name: S, doc: D) -> &mut Self {
+        self.queued_params.push((name.to_string(), doc.to_string()));
+        self
+    }
+
+    fn ret<S: std::fmt::Display>(&mut self, doc: S) -> &mut Self {
+        self.queued_returns.push(doc.to_string());
+        self
+    }
+
     fn add_method<S, A, R, M>(&mut self, name: S, _: M)
     where
         S: Into<String>,
@@ -505,33 +440,11 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         let name: Cow<'static, str> = name.into().into();
         self.methods.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_method_with<S, A, R, M, G>(&mut self, name: S, _method: M, generator: G)
-        where
-            S: Into<String>,
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.into().into();
-        self.methods.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
@@ -545,33 +458,11 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         let name: Cow<'static, str> = name.into().into();
         self.functions.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_function_with<S, A, R, F, G>(&mut self, name: S, _function: F, generator: G)
-        where
-            S: Into<String>,
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.into().into();
-        self.functions.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
@@ -585,71 +476,28 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         let name: Cow<'static, str> = name.into().into();
         self.methods.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
-    fn add_method_mut_with<S, A, R, M, G>(&mut self, name: S, _method: M, generator: G)
-        where
-            S: Into<String>,
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.into().into();
-        self.methods.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_meta_method<A, R, M>(&mut self, meta: MetaMethod, _: M)
+    fn add_meta_method<A, R, M>(&mut self, meta: impl Into<String>, _: M)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
     {
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
+        let name: Cow<'static, str> = meta.into().into();
         self.meta_methods.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_meta_method_with<A, R, M, G>(&mut self, meta: MetaMethod, _method: M, generator: G)
-        where
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_methods.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
@@ -665,79 +513,31 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    #[cfg(feature = "async")]
-    fn add_async_method_with<'s, S: ?Sized + AsRef<str>, A, R, M, MR, G>(&mut self, name: S, _method: M, generator: G)
-        where
-            T: 'static,
-            M: Fn(&Lua, &'s T, A) -> MR + MaybeSend + 'static,
-            A: FromLuaMulti + TypedMultiValue,
-            MR: std::future::Future<Output = mlua::Result<R>> + 's,
-            R: IntoLuaMulti + TypedMultiValue,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.methods.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
     #[cfg(feature = "async")]
     fn add_async_method_mut<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: S, method: M)
-        where
-            T: 'static,
-            M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
-            A: FromLuaMulti + TypedMultiValue,
-            MR: std::future::Future<Output = mlua::Result<R>> + 's,
-            R: IntoLuaMulti + TypedMultiValue {
-        
+    where
+        T: 'static,
+        M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti + TypedMultiValue,
+        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        R: IntoLuaMulti + TypedMultiValue,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    #[cfg(feature = "async")]
-    fn add_async_method_mut_with<'s, S: ?Sized + AsRef<str>, A, R, M, MR, G>(&mut self, name: S, _method: M, generator: G)
-        where
-            T: 'static,
-            M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
-            A: FromLuaMulti + TypedMultiValue,
-            MR: std::future::Future<Output = mlua::Result<R>> + 's,
-            R: IntoLuaMulti + TypedMultiValue,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.methods.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
@@ -751,71 +551,28 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         let name: Cow<'static, str> = name.into().into();
         self.functions.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
-    fn add_function_mut_with<S, A, R, F, G>(&mut self, name: S, _function: F, generator: G)
-        where
-            S: Into<String>,
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.into().into();
-        self.functions.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_meta_function<A, R, F>(&mut self, meta: MetaMethod, _: F)
+    fn add_meta_function<A, R, F>(&mut self, meta: impl Into<String>, _: F)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
     {
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
+        let name: Cow<'static, str> = meta.into().into();
         self.meta_functions.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_meta_function_with<A, R, F, G>(&mut self, meta: MetaMethod, _function: F, generator: G)
-        where
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.functions.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
@@ -831,111 +588,45 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
-    #[cfg(feature = "async")]
-    fn add_async_function_with<S: ?Sized, A, R, F, FR, G>(&mut self, name: S, _function: F, generator: G)
-        where
-            S: AsRef<str>,
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&Lua, A) -> FR,
-            FR: std::future::Future<Output = mlua::Result<R>>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.functions.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_meta_method_mut<A, R, M>(&mut self, meta: MetaMethod, _: M)
+    fn add_meta_method_mut<A, R, M>(&mut self, meta: impl Into<String>, _: M)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
     {
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
+        let name: Cow<'static, str> = meta.into().into();
         self.meta_methods.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types_as_returns(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-    
-    fn add_meta_method_mut_with<A, R, M, G>(&mut self, meta: MetaMethod, _method: M, generator: G)
-        where
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_methods.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 
-    fn add_meta_function_mut<A, R, F>(&mut self, meta: MetaMethod, _: F)
+    fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<String>, _: F)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
     {
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
+        let name: Cow<'static, str> = meta.into().into();
         self.meta_functions.insert(
             name.into(),
-            Func {
-                params: A::get_types_as_params(),
-                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
-        );
-    }
-
-    fn add_meta_function_mut_with<A, R, F, G>(&mut self, meta: MetaMethod, _function: F, generator: G)
-        where
-            A: FromLuaMulti + TypedMultiValue,
-            R: IntoLuaMulti + TypedMultiValue,
-            F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
-            G: Fn(&mut FunctionBuilder<A, R>) {
-        
-        let mut builder = FunctionBuilder::<A, R>::default();
-        generator(&mut builder);
-
-        let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_functions.insert(
-            name.into(),
-            Func {
-                params: builder.params,
-                returns: builder.returns,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            },
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
         );
     }
 }

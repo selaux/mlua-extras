@@ -1,8 +1,8 @@
-use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, MetaMethod};
+use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 
 use crate::MaybeSend;
 
-use super::{generator::FunctionBuilder, Typed, TypedMultiValue};
+use super::{Typed, TypedMultiValue};
 
 mod wrapped;
 mod standard;
@@ -48,18 +48,6 @@ pub trait TypedDataMethods<T> {
         R: IntoLuaMulti + TypedMultiValue,
         M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>;
 
-    /// Exposes a method to lua
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_method_with<S, A, R, M, G>(&mut self, name: S, method: M, generator: G)
-    where
-        S: Into<String>,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
     /// Exposes a method to lua that has a mutable reference to Self
     fn add_method_mut<S, A, R, M>(&mut self, name: S, method: M)
     where
@@ -67,18 +55,6 @@ pub trait TypedDataMethods<T> {
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>;
-
-    /// Exposes a method to lua that has a mutable reference to Self
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_method_mut_with<S, A, R, M, G>(&mut self, name: S, method: M, generator: G)
-    where
-        S: Into<String>,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
 
     #[cfg(feature = "async")]
     ///exposes an async method to lua
@@ -92,20 +68,6 @@ pub trait TypedDataMethods<T> {
 
     #[cfg(feature = "async")]
     ///exposes an async method to lua
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_async_method_with<'s, S: Into<String>, A, R, M, MR, G>(&mut self, name: S, method: M, generator: G)
-    where
-        T: 'static,
-        M: Fn(&Lua, &'s T, A) -> MR + MaybeSend + 'static,
-        A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
-        R: IntoLuaMulti + TypedMultiValue,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
-    #[cfg(feature = "async")]
-    ///exposes an async method to lua
     fn add_async_method_mut<'s, S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
     where
         T: 'static,
@@ -113,20 +75,6 @@ pub trait TypedDataMethods<T> {
         A: FromLuaMulti + TypedMultiValue,
         MR: std::future::Future<Output = mlua::Result<R>> + 's,
         R: IntoLuaMulti + TypedMultiValue;
-
-    #[cfg(feature = "async")]
-    ///exposes an async method to lua
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_async_method_mut_with<'s, S: Into<String>, A, R, M, MR, G>(&mut self, name: S, method: M, generator: G)
-    where
-        T: 'static,
-        M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
-        A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
-        R: IntoLuaMulti + TypedMultiValue,
-        G: Fn(&mut FunctionBuilder<A, R>);
 
     ///Exposes a function to lua (its a method that does not take Self)
     fn add_function<S, A, R, F>(&mut self, name: S, function: F)
@@ -136,18 +84,6 @@ pub trait TypedDataMethods<T> {
         R: IntoLuaMulti + TypedMultiValue,
         F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>;
 
-    ///Exposes a function to lua (its a method that does not take Self)
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_function_with<S, A, R, F, G>(&mut self, name: S, function: F, generator: G)
-    where
-        S: Into<String>,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
     ///Exposes a mutable function to lua
     fn add_function_mut<S, A, R, F>(&mut self, name: S, function: F)
     where
@@ -155,18 +91,6 @@ pub trait TypedDataMethods<T> {
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>;
-
-    ///Exposes a mutable function to lua
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_function_mut_with<S, A, R, F, G>(&mut self, name: S, function: F, generator: G)
-    where
-        S: Into<String>,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
 
     #[cfg(feature = "async")]
     ///exposes an async function to lua
@@ -178,91 +102,46 @@ pub trait TypedDataMethods<T> {
         F: 'static + MaybeSend + Fn(&Lua, A) -> FR,
         FR: std::future::Future<Output = mlua::Result<R>>;
 
-    #[cfg(feature = "async")]
-    ///exposes an async function to lua
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_async_function_with<S, A, R, F, FR, G>(&mut self, name: S, function: F, generator: G)
-    where
-        S: Into<String>,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + Fn(&Lua, A) -> FR,
-        FR: std::future::Future<Output = mlua::Result<R>>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
     ///Exposes a meta method to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    fn add_meta_method<A, R, M>(&mut self, meta: MetaMethod, method: M)
+    fn add_meta_method<A, R, M>(&mut self, meta: impl Into<String>, method: M)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>;
 
-    ///Exposes a meta method to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_meta_method_with<A, R, M, G>(&mut self, meta: MetaMethod, method: M, generator: G)
-    where
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
     ///Exposes a meta and mutable method to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    fn add_meta_method_mut<A, R, M>(&mut self, meta: MetaMethod, method: M)
+    fn add_meta_method_mut<A, R, M>(&mut self, meta: impl Into<String>, method: M)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>;
 
-    ///Exposes a meta and mutable method to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_meta_method_mut_with<A, R, M, G>(&mut self, meta: MetaMethod, method: M, generator: G)
-    where
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
     ///Exposes a meta function to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    fn add_meta_function<A, R, F>(&mut self, meta: MetaMethod, function: F)
+    fn add_meta_function<A, R, F>(&mut self, meta: impl Into<String>, function: F)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>;
 
-    ///Exposes a meta function to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    ///
-    /// Pass an additional callback that allows for param names, param doc comments, and return doc
-    /// comments to be specified.
-    fn add_meta_function_with<A, R, F, G>(&mut self, meta: MetaMethod, function: F, generator: G)
-    where
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
     ///Exposes a meta and mutable function to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    fn add_meta_function_mut<A, R, F>(&mut self, meta: MetaMethod, function: F)
+    fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<String>, function: F)
     where
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
         F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>;
 
-    ///Exposes a meta and mutable function to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
-    fn add_meta_function_mut_with<A, R, F, G>(&mut self, meta: MetaMethod, function: F, generator: G)
-    where
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
-        G: Fn(&mut FunctionBuilder<A, R>);
-
-    ///Adds documentation to the next method/function that gets added
+    /// Adds documentation to the next method/function that gets added
     fn document(&mut self, doc: &str) -> &mut Self;
+
+    /// Adds a param name and doc comment to the next method/function that gets added.
+    /// 
+    /// These will be applied to the params in the order they were defined.
+    fn param<S: std::fmt::Display, D: std::fmt::Display>(&mut self, name: S, doc: D) -> &mut Self;
+
+    /// Adds a return doc comment tot he next method/function that gets added.
+    /// 
+    /// These will be applied to the returns in the order they were defined.
+    fn ret<S: std::fmt::Display>(&mut self, doc: S) -> &mut Self;
 }
 
 /// Typed variant of [`UserDataMethods`]
@@ -322,8 +201,12 @@ pub trait TypedDataFields<T> {
         SET: 'static + MaybeSend + Fn(&Lua, AnyUserData, A) -> mlua::Result<()>;
 
     /// Typed version of [add_meta_field](mlua::UserDataFields::add_meta_field)
-    fn add_meta_field<R, F>(&mut self, meta: MetaMethod, f: F)
+    fn add_meta_field<V>(&mut self, meta: impl Into<String>, value: V)
+    where V: IntoLua + Typed + 'static;
+
+    /// Typed version of [add_meta_field](mlua::UserDataFields::add_meta_field_with)
+    fn add_meta_field_with<R, F>(&mut self, meta: impl Into<String>, f: F)
     where
         F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
-        R: IntoLua + Typed;
+        R: IntoLua + Typed + 'static;
 }
