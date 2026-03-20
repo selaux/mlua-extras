@@ -190,12 +190,12 @@ fn main() -> mlua::Result<()> {
             .register::<SystemColor>("System")?
             .register::<Color>("Color")?
             .register::<Example>("Example")
-            .value_with::<Example, _>("example", Some("Example module"))
+            .document("Example module")
+            .value::<Example>("example")
             .function::<Color, ()>("printColor", ())
-            .function_with::<String, (), _>("greet", (), |func| {
-                func.document("Greet the name that was passed in");
-                func.param(0, |param| param.name("name").doc("Name of the person to greet"));
-            })
+            .document("Greet the name that was passed in")
+            .param("name", "Name of the person to greet")
+            .function::<String, ()>("greet", ())
         )
         .finish();
 
