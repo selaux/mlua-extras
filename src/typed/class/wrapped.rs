@@ -2,13 +2,15 @@ use mlua::{
     AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, UserData,
     UserDataFields, UserDataMethods,
 };
+#[cfg(feature = "async")]
+use mlua::{UserDataRef, UserDataRefMut};
 
 use crate::MaybeSend;
 
 use super::{Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
 
 /// Wrapper around a [`UserDataFields`] and [`UserDataMethods`]
-/// to allow [`TypedUserData`] implementations to be used for [`UserData`]
+/// to allow [`TypedUserData`](super::TypedUserData) implementations to be used for [`mlua::UserData`]
 /// implementations
 pub struct WrappedBuilder<'ctx, U>(&'ctx mut U);
 impl<'ctx, U> WrappedBuilder<'ctx, U> {
@@ -163,25 +165,25 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: &S, method: M)
+    fn add_async_method<S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
     where
         T: 'static,
-        M: Fn(&Lua, &'s T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
-        R: IntoLuaMulti,
+        MR: std::future::Future<Output = mlua::Result<R>> + MaybeSend + 'static,
+        R: IntoLuaMulti + TypedMultiValue,
     {
         self.0.add_async_method(name, method)
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method_mut<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: &S, method: M)
+    fn add_async_method_mut<S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
     where
         T: 'static,
-        M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
-        R: IntoLuaMulti,
+        MR: std::future::Future<Output = mlua::Result<R>> + MaybeSend + 'static,
+        R: IntoLuaMulti + TypedMultiValue,
     {
         self.0.add_async_method_mut(name, method)
     }
@@ -206,13 +208,13 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
     }
 
     #[cfg(feature = "async")]
-    fn add_async_function<S: ?Sized, A, R, F, FR>(&mut self, name: &S, function: F)
+    fn add_async_function<S, A, R, F, FR>(&mut self, name: S, function: F)
     where
-        S: AsRef<str>,
+        S: Into<String>,
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + Fn(&Lua, A) -> FR,
-        FR: std::future::Future<Output = mlua::Result<R>>,
+        F: 'static + MaybeSend + Fn(Lua, A) -> FR,
+        FR: 'static + MaybeSend + std::future::Future<Output = mlua::Result<R>>,
     {
         self.0.add_async_function(name, function)
     }
@@ -233,5 +235,35 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         F: FnMut(&Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
     {
         self.0.add_meta_function_mut(meta, function)
+    }
+}
+
+#[cfg(test)]
+#[cfg(all(feature = "async", feature = "derive"))]
+mod tests {
+    use super::*;
+    use crate as mlua_extras;
+    use crate::typed::TypedUserData;
+    use crate::{Typed, UserData};
+
+    #[derive(Clone, Typed, UserData)]
+    struct Counter {
+        value: i64,
+    }
+
+    impl TypedUserData for Counter {
+        fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
+            methods.add_async_method("get_value", |_lua, this, _: ()| async move {
+                Ok(this.value)
+            });
+        }
+    }
+
+    #[test]
+    fn test_add_async_method_compiles() {
+        let lua = Lua::new();
+        lua.globals()
+            .set("counter", Counter { value: 42 })
+            .unwrap();
     }
 }

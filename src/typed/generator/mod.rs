@@ -179,7 +179,7 @@ impl DefinitionBuilder {
     ///
     /// # Example
     /// ```
-    /// user mlua_extras::{typed::{Definitions, TypedUserData}, Typed, UserData};
+    /// use mlua_extras::{typed::{generator::{Definitions, Definition}, TypedUserData, TypedDataFields}, Typed, UserData};
     ///
     /// #[derive(UserData, Typed)]
     /// struct Example {
@@ -189,13 +189,13 @@ impl DefinitionBuilder {
     ///     fn add_documentation<F: mlua_extras::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
     ///         docs.add("This is an example");
     ///     }
-    ///     
+    ///
     ///     fn add_fields<F: TypedDataFields<Self>>(fields: &mut F) {
     ///         fields
     ///             .document("Example field")
     ///             .add_field_method_get_set(
     ///                 "color",
-    ///                 |_lua, this| Ok(this.color),
+    ///                 |_lua, this| Ok(this.color.clone()),
     ///                 |_lua, this, clr: String| {
     ///                     this.color = clr;
     ///                     Ok(())
@@ -204,9 +204,11 @@ impl DefinitionBuilder {
     ///     }
     /// }
     ///
-    /// Definitions::generate("init")
-    ///     .register::<Example>("Example")
-    ///     .value::<Example>("example")
+    /// Definitions::start()
+    ///     .define("init", Definition::start()
+    ///         .register::<Example>("Example")
+    ///         .value::<Example>("example")
+    ///     )
     ///     .finish();
     /// ```
     ///
