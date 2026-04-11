@@ -32,17 +32,26 @@ jobs:
           - lua54,vendored,send,async,derive
           # Full feature set including serialize and macros
           - lua54,vendored,send,async,derive,serialize,macros
+          # Luau feature combinations
+          - luau,vendored
+          - luau,vendored,send,async,derive,serialize,macros
     steps:
       - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Install luau-lsp
+        if: contains(matrix.features, 'luau')
+        run: |
+          curl -fsSL -o luau-lsp.zip https://github.com/JohnnyMorganz/luau-lsp/releases/latest/download/luau-lsp-linux-x86_64.zip
+          unzip luau-lsp.zip -d luau-lsp
+          chmod +x luau-lsp/luau-lsp
+          echo "$PWD/luau-lsp" >> "$GITHUB_PATH"
+
       - name: Check
         run: cargo check ${{ matrix.features && format('--features {0}', matrix.features) }}
 
       - name: Test
-        env:
-          TEST_LUAU: ${{ contains(matrix.features, 'luau') && '1' || '' }}
         # Note: we're not doing a full `cargo test` here because some doc comments
         # implicitly rely on feature flags that may not be present in a given invocation
         run: cargo test --lib --tests ${{ matrix.features && format('--features {0}', matrix.features) }}

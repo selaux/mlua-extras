@@ -13,6 +13,11 @@ use super::{
 mod type_file;
 pub use type_file::DefinitionFileGenerator;
 
+mod luau_type_file;
+pub use luau_type_file::LuauDefinitionFileGenerator;
+
+mod luau_type_file_tests;
+
 /// Representation of a type that is defined in the definition file.
 ///
 /// This type has a name and additional documentation that can be displayed
