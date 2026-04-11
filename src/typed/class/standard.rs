@@ -63,7 +63,7 @@ impl TypedClassBuilder {
     /// TypedClassBuilder::default()
     ///     .field("data1", Type::string() | Type::nil(), "doc comment goes last")
     ///     .field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
-    ///     .field("message", Type::string(), foramt!("A message for {NAME}"))
+    ///     .field("message", Type::string(), format!("A message for {NAME}"));
     /// ```
     pub fn field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
         self.fields.insert(key.into(), Field::new(ty, doc));
@@ -80,7 +80,7 @@ impl TypedClassBuilder {
     /// TypedClassBuilder::default()
     ///     .function::<String, ()>("greet", "Greet the given name")
     ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .function::<String, ()>("hello", ())
+    ///     .function::<String, ()>("hello", ());
     /// ```
     pub fn function<Params, Returns>(
         mut self,
@@ -115,7 +115,7 @@ impl TypedClassBuilder {
     /// TypedClassBuilder::default()
     ///     .method::<String, ()>("greet", "Greet the given name")
     ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .method::<String, ()>("hello", ())
+    ///     .method::<String, ()>("hello", ());
     /// ```
     pub fn method<Params, Returns>(
         mut self,
@@ -149,7 +149,7 @@ impl TypedClassBuilder {
     /// TypedClassBuilder::default()
     ///     .meta_field("data1", Type::string() | Type::nil(), "doc comment goes last")
     ///     .meta_field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
-    ///     .meta_field("message", Type::string(), foramt!("A message for {NAME}"))
+    ///     .meta_field("message", Type::string(), format!("A message for {NAME}"));
     /// ```
     pub fn meta_field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
         self.meta_fields.insert(key.into(), Field::new(ty, doc));
@@ -166,7 +166,7 @@ impl TypedClassBuilder {
     /// TypedClassBuilder::default()
     ///     .meta_function::<String, ()>("greet", "Greet the given name")
     ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .meta_function::<String, ()>("hello", ())
+    ///     .meta_function::<String, ()>("hello", ());
     /// ```
     pub fn meta_function<Params, Returns>(
         mut self,
@@ -203,7 +203,7 @@ impl TypedClassBuilder {
     /// TypedClassBuilder::default()
     ///     .method::<String, ()>("greet", "Greet the given name")
     ///     // Can use `None` instead of `()` for specifying the doc comment
-    ///     .method::<String, ()>("hello", ())
+    ///     .method::<String, ()>("hello", ());
     /// ```
     pub fn meta_method<Params, Returns>(
         mut self,

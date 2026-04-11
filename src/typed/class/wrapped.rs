@@ -10,7 +10,7 @@ use crate::MaybeSend;
 use super::{Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
 
 /// Wrapper around a [`UserDataFields`] and [`UserDataMethods`]
-/// to allow [`TypedUserData`] implementations to be used for [`UserData`]
+/// to allow [`TypedUserData`](super::TypedUserData) implementations to be used for [`mlua::UserData`]
 /// implementations
 pub struct WrappedBuilder<'ctx, U>(&'ctx mut U);
 impl<'ctx, U> WrappedBuilder<'ctx, U> {

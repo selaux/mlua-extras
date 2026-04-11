@@ -12,25 +12,25 @@ mod standard;
 pub use wrapped::WrappedBuilder;
 pub use standard::TypedClassBuilder;
 
-/// Typed variant of [`UserData`]
+/// Typed variant of [`mlua::UserData`]
 pub trait TypedUserData: Sized {
     /// Add documentation to the type itself
     #[allow(unused_variables)]
     fn add_documentation<F: TypedDataDocumentation<Self>>(docs: &mut F) {}
 
-    ///same as [UserData::add_methods].
+    ///same as [`mlua::UserData::add_methods`].
     ///Refer to its documentation on how to use it.
     ///
     ///only difference is that it takes a [TypedDataMethods],
-    ///which is the typed version of [UserDataMethods]
+    ///which is the typed version of [`mlua::UserDataMethods`]
     #[allow(unused_variables)]
     fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {}
 
-    /// same as [UserData::add_fields].
+    /// same as [`mlua::UserData::add_fields`].
     /// Refer to its documentation on how to use it.
     ///
     /// only difference is that it takes a [TypedDataFields],
-    /// which is the typed version of [UserDataFields]
+    /// which is the typed version of [`mlua::UserDataFields`]
     #[allow(unused_variables)]
     fn add_fields<F: TypedDataFields<Self>>(fields: &mut F) {}
 }
@@ -40,7 +40,7 @@ pub trait TypedDataDocumentation<T: TypedUserData> {
     fn add(&mut self, doc: &str) -> &mut Self;
 }
 
-/// Typed variant of [`UserDataFields`]
+/// Typed variant of [`mlua::UserDataMethods`]
 pub trait TypedDataMethods<T> {
     /// Exposes a method to lua
     fn add_method<S, A, R, M>(&mut self, name: S, method: M)
@@ -146,7 +146,7 @@ pub trait TypedDataMethods<T> {
     fn ret<S: std::fmt::Display>(&mut self, doc: S) -> &mut Self;
 }
 
-/// Typed variant of [`UserDataMethods`]
+/// Typed variant of [`mlua::UserDataFields`]
 pub trait TypedDataFields<T> {
     ///Adds documentation to the next field that gets added
     fn document(&mut self, doc: &str) -> &mut Self;

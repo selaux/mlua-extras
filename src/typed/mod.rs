@@ -289,7 +289,7 @@ pub enum Type {
     ///
     /// ```lua
     /// --- @type string
-    /// --- @type number 
+    /// --- @type number
     /// --- @type 0
     /// --- @type "literal"
     /// --- @type Example
@@ -354,7 +354,7 @@ pub enum Type {
     /// Represents a function with it's parameters and return types
     ///
     /// # Example
-    /// 
+    ///
     /// ```lua
     /// --- @type fun(self: any, name: string): string
     /// ```
@@ -383,7 +383,7 @@ pub enum Type {
     /// ```lua
     /// --- @class {name}
     /// --- @field name string
-    /// --- @field age integer 
+    /// --- @field age integer
     /// --- @field height number
     /// ```
     Class(Box<TypedClassBuilder>),
@@ -396,7 +396,7 @@ pub enum Type {
 /// ```
 /// use mlua_extras::typed::Type;
 ///
-/// Type::string() | Type::nil()
+/// Type::string() | Type::nil();
 /// ```
 impl<T: Into<Type>> std::ops::BitOr<T> for Type {
     type Output = Self;
@@ -449,7 +449,7 @@ impl Type {
     /// use mlua_extras::typed::Type;
     ///
     /// // This references the type named `Example`
-    /// Type::named("Example")
+    /// Type::named("Example");
     /// ```
     pub fn named(value: impl Into<Cow<'static, str>>) -> Self {
         Self::Single(value.into())
@@ -596,12 +596,12 @@ macro_rules! impl_type_literal {
                 fn into_lua_type_literal(self) -> String {
                     self.to_string()
                 }
-            } 
+            }
             impl IntoLuaTypeLiteral for &$lit {
                 fn into_lua_type_literal(self) -> String {
                     self.to_string()
                 }
-            } 
+            }
         )*
     };
 }
