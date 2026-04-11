@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    # Run the tests in each of the feature combinations.
+    # This is not an exhaustive test of all possible combinations,
+    # just those that affect the code in the crate.
+    name: test (${{ matrix.features }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          # No features at all
+          - ""
+          # lua54+vendored base, then all combinations of: send, async, derive
+          - lua54,vendored
+          - lua54,vendored,send
+          - lua54,vendored,async
+          - lua54,vendored,derive
+          - lua54,vendored,send,async
+          - lua54,vendored,send,derive
+          - lua54,vendored,async,derive
+          - lua54,vendored,send,async,derive
+          # Full feature set including serialize and macros
+          - lua54,vendored,send,async,derive,serialize,macros
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check
+        run: cargo check ${{ matrix.features && format('--features {0}', matrix.features) }}
+
+      - name: Test
+        env:
+          TEST_LUAU: ${{ contains(matrix.features, 'luau') && '1' || '' }}
+        # Note: we're not doing a full `cargo test` here because some doc comments
+        # implicitly rely on feature flags that may not be present in a given invocation
+        run: cargo test --lib --tests ${{ matrix.features && format('--features {0}', matrix.features) }}
+
+  docs:
+    # Test building the docs, and the doc comment code samples
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Grab the features from the manifest so that we're not duplicating
+      # them here in this workflow.  This enables running the docs the
+      # same way that docs.rs will run them.
+      - name: Extract docs.rs features
+        id: docsrs
+        run: |
+          features=$(cargo metadata --format-version 1 --no-deps \
+            | jq -r '.packages[]
+                      | select(.name == "mlua-extras")
+                      | .metadata.docs.rs.features
+                      | join(",")')
+          echo "features=$features" >> "$GITHUB_OUTPUT"
+
+      # Now build the docs with that set of features
+      - name: Build docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --features "${{ steps.docsrs.outputs.features }}"
+
+      # And the doc comment inline code samples
+      - name: Doc tests
+        run: cargo test --doc --features "${{ steps.docsrs.outputs.features }}"
