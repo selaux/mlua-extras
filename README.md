@@ -240,3 +240,26 @@ function greet(name) end
 --- @param param0 Color
 function printColor(param0) end
 ```
+
+## Testing
+
+To run all the tests in one shot, use `cargo test --features luau,vendored,send,async,serialize,derive`
+
+Some features of this crate generate luau compatible definition files, or use
+luau specific features.  To add an additional layer of validation to the tests
+you can install [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) and
+the tests will run the type checker, and fail if the results are not as
+expected.
+
+See [our luau docs](LUAU.md#validating-generated-definitions) for more
+information on installing the lsp; there are pre-built binaries available
+which makes it quick and painless.
+
+The `TEST_LUAU` environment variable controls luau-lsp validation:
+
+| Value | Behavior |
+|---|---|
+| *(unset)* | Auto-detect `luau-lsp` on `PATH`. If found, run validation; otherwise skip. |
+| `0` | Skip validation entirely, even if `luau-lsp` is on `PATH`. |
+| *path* | Use the given value as the `luau-lsp` binary path (e.g. `TEST_LUAU=/tmp/luau-lsp`). |
+

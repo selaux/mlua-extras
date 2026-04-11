@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use mlua_extras::{
     Typed, UserData, extras::LuaExtras, mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, Value, Variadic}, typed::{
-        Type, TypedDataFields, TypedDataMethods, TypedUserData, generator::{Definition, DefinitionFileGenerator, Definitions}
+        Type, TypedDataFields, TypedDataMethods, TypedUserData, generator::{Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator}
     }
 };
 use serde::Deserialize;
@@ -161,7 +161,7 @@ fn main() -> mlua::Result<()> {
 
     // ===== Generate Types and Definition Files =====
 
-    let definitions = Definitions::start()
+    let definitions: Definitions = Definitions::start()
         .define("init", Definition::start()
             .register::<SystemColor>("System")
             .register::<Color>("Color")
@@ -179,8 +179,14 @@ fn main() -> mlua::Result<()> {
         std::fs::create_dir_all(&types_path).unwrap();
     }
 
-    let gen = DefinitionFileGenerator::new(definitions);
+    let gen = DefinitionFileGenerator::new(definitions.clone());
     for (name, writer) in gen.iter() {
+        println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        writer.write_file(types_path.join(name)).unwrap();
+    }
+
+    let luau_gen = LuauDefinitionFileGenerator::new(definitions);
+    for (name, writer) in luau_gen.iter() {
         println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
         writer.write_file(types_path.join(name)).unwrap();
     }
