@@ -502,15 +502,15 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: S, _: M)
+    fn add_async_method<S: Into<String>, A, R, M, MR>(&mut self, name: S, _: M)
     where
         T: 'static,
-        M: Fn(&Lua, &'s T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, mlua::UserDataRef<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        MR: std::future::Future<Output = mlua::Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti + TypedMultiValue,
     {
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
+        let name: Cow<'static, str> = name.into().into();
         self.methods.insert(
             name.into(),
             Func::new::<A, R>(
@@ -522,15 +522,15 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
     }
 
     #[cfg(feature = "async")]
-    fn add_async_method_mut<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: S, method: M)
+    fn add_async_method_mut<S: Into<String>, A, R, M, MR>(&mut self, name: S, _method: M)
     where
         T: 'static,
-        M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, mlua::UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        MR: std::future::Future<Output = mlua::Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti + TypedMultiValue,
     {
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
+        let name: Cow<'static, str> = name.into().into();
         self.methods.insert(
             name.into(),
             Func::new::<A, R>(
@@ -577,15 +577,15 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
     }
 
     #[cfg(feature = "async")]
-    fn add_async_function<S: ?Sized, A, R, F, FR>(&mut self, name: S, _: F)
+    fn add_async_function<S, A, R, F, FR>(&mut self, name: S, _: F)
     where
-        S: AsRef<str>,
+        S: Into<String>,
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + Fn(&Lua, A) -> FR,
-        FR: std::future::Future<Output = mlua::Result<R>>,
+        F: 'static + MaybeSend + Fn(Lua, A) -> FR,
+        FR: 'static + MaybeSend + std::future::Future<Output = mlua::Result<R>>,
     {
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
+        let name: Cow<'static, str> = name.into().into();
         self.functions.insert(
             name.into(),
             Func::new::<A, R>(

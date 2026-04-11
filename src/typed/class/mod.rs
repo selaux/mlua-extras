@@ -1,4 +1,6 @@
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
+#[cfg(feature = "async")]
+use mlua::{UserDataRef, UserDataRefMut};
 
 use crate::MaybeSend;
 
@@ -58,22 +60,22 @@ pub trait TypedDataMethods<T> {
 
     #[cfg(feature = "async")]
     ///exposes an async method to lua
-    fn add_async_method<'s, S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
+    fn add_async_method<S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
     where
         T: 'static,
-        M: Fn(&Lua, &'s T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRef<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        MR: std::future::Future<Output = mlua::Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti + TypedMultiValue;
 
     #[cfg(feature = "async")]
     ///exposes an async method to lua
-    fn add_async_method_mut<'s, S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
+    fn add_async_method_mut<S: Into<String>, A, R, M, MR>(&mut self, name: S, method: M)
     where
         T: 'static,
-        M: Fn(&Lua, &'s mut T, A) -> MR + MaybeSend + 'static,
+        M: Fn(Lua, UserDataRefMut<T>, A) -> MR + MaybeSend + 'static,
         A: FromLuaMulti + TypedMultiValue,
-        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        MR: std::future::Future<Output = mlua::Result<R>> + MaybeSend + 'static,
         R: IntoLuaMulti + TypedMultiValue;
 
     ///Exposes a function to lua (its a method that does not take Self)
@@ -99,8 +101,8 @@ pub trait TypedDataMethods<T> {
         S: Into<String>,
         A: FromLuaMulti + TypedMultiValue,
         R: IntoLuaMulti + TypedMultiValue,
-        F: 'static + MaybeSend + Fn(&Lua, A) -> FR,
-        FR: std::future::Future<Output = mlua::Result<R>>;
+        F: 'static + MaybeSend + Fn(Lua, A) -> FR,
+        FR: 'static + MaybeSend + std::future::Future<Output = mlua::Result<R>>;
 
     ///Exposes a meta method to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
     fn add_meta_method<A, R, M>(&mut self, meta: impl Into<String>, method: M)
