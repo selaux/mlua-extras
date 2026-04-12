@@ -19,7 +19,9 @@ pub struct Param {
 impl Param {
     /// Set the parameters name
     pub fn name(&mut self, name: impl Into<Cow<'static, str>>) -> &mut Self {
-        self.name = Some(name.into());
+        let name = name.into();
+        if name.trim().is_empty() { return self; }
+        self.name = Some(name);
         self
     }
 

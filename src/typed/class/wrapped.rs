@@ -5,9 +5,9 @@ use mlua::{
 #[cfg(feature = "async")]
 use mlua::{UserDataRef, UserDataRefMut};
 
-use crate::MaybeSend;
+use crate::{MaybeSend, typed::IntoDocComment};
 
-use super::{Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
+use super::{Type, Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
 
 /// Wrapper around a [`UserDataFields`] and [`UserDataMethods`]
 /// to allow [`TypedUserData`](super::TypedUserData) implementations to be used for [`mlua::UserData`]
@@ -20,7 +20,11 @@ impl<'ctx, U> WrappedBuilder<'ctx, U> {
 }
 
 impl<'ctx, T: UserData, U: UserDataFields<T>> TypedDataFields<T> for WrappedBuilder<'ctx, U> {
-    fn document(&mut self, _doc: &str) -> &mut Self {
+    fn document(&mut self, _doc: impl IntoDocComment) -> &mut Self {
+        self
+    }
+
+    fn coerce(&mut self, _ty: impl Into<Type>) -> &mut Self {
         self
     }
 
@@ -109,19 +113,33 @@ impl<'ctx, T: UserData, U: UserDataFields<T>> TypedDataFields<T> for WrappedBuil
 }
 
 impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBuilder<'ctx, U> {
-    fn document(&mut self, _documentation: &str) -> &mut Self {
+    fn document(&mut self, _documentation: impl IntoDocComment) -> &mut Self {
         self
     }
 
-    fn param<S: std::fmt::Display, D: std::fmt::Display>(
+    fn param(
         &mut self,
-        _name: S,
-        _doc: D,
+        _name: impl std::fmt::Display,
+        _doc: impl IntoDocComment,
+    ) -> &mut Self {
+        self
+    }
+    
+    fn param_as(
+        &mut self,
+        _ty: impl Into<Type>,
+        _name: impl std::fmt::Display,
+        _doc: impl IntoDocComment,
     ) -> &mut Self {
         self
     }
 
-    fn ret<S: std::fmt::Display>(&mut self, _doc: S) -> &mut Self {
+
+    fn ret(&mut self, _: impl IntoDocComment) -> &mut Self {
+        self
+    }
+    
+    fn ret_as(&mut self, _: impl Into<Type>, _: impl IntoDocComment) -> &mut Self {
         self
     }
 

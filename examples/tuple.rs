@@ -1,26 +1,15 @@
 use std::path::PathBuf;
 use mlua_extras::{
-    mlua,
-    typed::{
-        generator::{Definition, DefinitionFileGenerator, Definitions},
-        TypedDataFields, TypedDataMethods, TypedUserData,
-    },
-    Typed, UserData,
+    Typed, UserData, mlua, typed::{
+        Param, Type, Typed, TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedUserData, generator::{Definition, DefinitionFileGenerator, Definitions}
+    }
 };
 
 #[derive(Typed, UserData)]
-struct A {}
-impl TypedUserData for A {}
-
-#[derive(Typed, UserData)]
-struct B {}
-impl TypedUserData for B {}
-
-#[derive(Typed, UserData)]
-#[typed(derive(A, B))]
 enum Kind {
     A(String),
     B { name: String, data: String },
+    C
 }
 
 impl Kind {
@@ -28,6 +17,7 @@ impl Kind {
         match self {
             Self::A(data) => data.clone(),
             Self::B { data, .. } => data.clone(),
+            Self::C => "".to_string()
         }
     }
 }
@@ -50,16 +40,19 @@ impl TypedUserData for Kind {
                 )),
             }
         });
+
+        fields
+            .coerce(Type::literal("A") | "B" | "C")
+            .add_field_function_get("__variant", |_lua, this| {
+                match *this.borrow::<Self>().unwrap() {
+                    Self::A(_) => Ok("A"),
+                    Self::B { .. } => Ok("B"),
+                    Self::C => Ok("C")
+                }
+            });
     }
 
     fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
-        methods.add_method("__variant", |_lua, this: &Self, _: ()| {
-            Ok(match this {
-                Self::A(_) => "A",
-                Self::B { .. } => "B",
-            })
-        });
-
         methods.add_index_meta_method::<(String,), _, _, _>(|_lua, this: &Self, key: usize| {
             match key {
                 1 => match this {
@@ -76,7 +69,8 @@ impl TypedUserData for Kind {
             }
         });
 
-        methods.add_method("getData", |_lua, this: &Self, _: ()| Ok(this.get_data()))
+        methods
+            .add_method("getData", |_lua, this: &Self, _: ()| Ok(this.get_data()))
     }
 }
 

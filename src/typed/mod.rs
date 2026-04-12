@@ -4,11 +4,17 @@ pub mod generator;
 mod class;
 
 pub use class::{
-    TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedDataDocumentation, TypedUserData, WrappedBuilder,
+    TypedClassBuilder, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedUserData,
+    WrappedBuilder,
 };
 
 use std::{
-    borrow::Cow, cell::{Cell, RefCell}, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData, rc::Rc, sync::{Arc, Mutex}
+    borrow::Cow,
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    marker::PhantomData,
+    rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use function::Return;
@@ -21,6 +27,11 @@ pub trait Typed {
     /// Get the type representation
     fn ty() -> Type;
 
+    #[inline(always)]
+    fn implicit() -> impl IntoIterator<Item = (&'static str, Type)> {
+        []
+    }
+
     /// Get the type as a function parameter
     fn as_param() -> Param {
         Param {
@@ -29,6 +40,15 @@ pub trait Typed {
             ty: Self::ty(),
         }
     }
+}
+
+#[macro_export]
+macro_rules! join_types {
+    ($($ty:expr),+) => {
+        $crate::typed::Type::union([
+            $($crate::typed::Type::from($ty),)+
+        ])
+    };
 }
 
 macro_rules! impl_static_typed {
@@ -159,8 +179,8 @@ impl<T: Typed> Typed for PhantomData<T> {
 // ```lua
 // --- @type [string, integer, "literal"]
 // ```
-impl<const N: usize> From<[Type;N]> for Type {
-    fn from(value: [Type;N]) -> Self {
+impl<const N: usize> From<[Type; N]> for Type {
+    fn from(value: [Type; N]) -> Self {
         Type::Tuple(Vec::from(value))
     }
 }
@@ -232,10 +252,12 @@ impl std::fmt::Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Int(num) => write!(f, "[{num}]"),
-            Self::Str(val) => if val.chars().any(|v| !v.is_alphanumeric() && v != '_') {
-                write!(f, r#"["{val}"]"#)
-            } else {
-                write!(f, "{val}")
+            Self::Str(val) => {
+                if val.chars().any(|v| !v.is_alphanumeric() && v != '_') {
+                    write!(f, r#"["{val}"]"#)
+                } else {
+                    write!(f, "{val}")
+                }
             }
         }
     }
@@ -245,7 +267,7 @@ impl IntoLua for Index {
     fn into_lua(self, lua: &mlua::Lua) -> mlua::prelude::LuaResult<Value> {
         match self {
             Self::Int(num) => Ok(mlua::Value::Integer(num as mlua::Integer)),
-            Self::Str(val) => val.into_lua(lua)
+            Self::Str(val) => val.into_lua(lua),
         }
     }
 }
@@ -434,7 +456,7 @@ impl Type {
         Self::Single(value.into_lua_type_literal().into())
     }
 
-    /// Create a references the name of another defined type.
+    /// Create a reference to a name of another defined type.
     ///
     /// # Example
     ///
@@ -448,7 +470,7 @@ impl Type {
     /// ```
     /// use mlua_extras::typed::Type;
     ///
-    /// // This references the type named `Example`
+    /// // This reference the type named `Example`
     /// Type::named("Example");
     /// ```
     pub fn named(value: impl Into<Cow<'static, str>>) -> Self {
@@ -496,9 +518,7 @@ impl Type {
     }
 
     /// Create an enum type. This is equal to an [`alias`][crate::typed::Type::Alias]
-    pub fn r#enum(
-        types: impl IntoIterator<Item = Type>,
-    ) -> Self {
+    pub fn r#enum(types: impl IntoIterator<Item = Type>) -> Self {
         Self::Enum(types.into_iter().collect())
     }
 
@@ -533,7 +553,10 @@ impl Type {
     }
 
     /// create a type that is a function. i.e. `fun(self): number`
-    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>(params: Vec<(String, String)>, returns: Vec<String>) -> Self {
+    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>(
+        params: Vec<(String, String)>,
+        returns: Vec<String>,
+    ) -> Self {
         Self::Function {
             params: Params::get_types_as_params()
                 .into_iter()
@@ -561,7 +584,7 @@ impl Type {
     /// A table that has defined entries.
     ///
     /// If the goal is a map like syntax use [`Type::Map`] or [`Type::map`] instead
-    pub fn table(items: impl IntoIterator<Item=(Index, Type)>) -> Self {
+    pub fn table(items: impl IntoIterator<Item = (Index, Type)>) -> Self {
         Self::Table(items.into_iter().collect())
     }
 }
@@ -606,12 +629,12 @@ macro_rules! impl_type_literal {
     };
 }
 
-impl_type_literal!{
+impl_type_literal! {
     u8, u16, u32, u64, usize, u128,
     i8, i16, i32, i64, isize, i128,
     f32, f64
 }
-impl_type_literal!{bool}
+impl_type_literal! {bool}
 
 /// Typed information for a lua [`MultiValue`][mlua::MultiValue]
 pub trait TypedMultiValue {
@@ -701,7 +724,7 @@ impl Field {
     pub fn new(ty: Type, doc: impl IntoDocComment) -> Self {
         Self {
             ty,
-            doc: doc.into_doc_comment()
+            doc: doc.into_doc_comment(),
         }
     }
 }
@@ -715,7 +738,11 @@ pub struct Func {
 }
 
 impl Func {
-    pub fn new<Params, Returns>(doc: impl IntoDocComment, params: Vec<(String, String)>, returns: Vec<String>) -> Self
+    pub fn new<Params, Returns>(
+        doc: impl IntoDocComment,
+        params: Vec<(Option<Type>, String, Option<Cow<'static, str>>)>,
+        returns: Vec<(Option<Type>, Option<Cow<'static, str>>)>,
+    ) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
@@ -725,8 +752,11 @@ impl Func {
                 .into_iter()
                 .enumerate()
                 .map(|(i, mut v)| {
-                    if let Some((name, doc)) = params.get(i) {
-                        v.name(name.clone()).doc(doc.as_str());
+                    if let Some((ty, name, doc)) = params.get(i) {
+                        v.name(name.clone()).doc(doc.clone());
+                        if let Some(t) = ty {
+                            v.ty(t.clone());
+                        }
                     }
                     v
                 })
@@ -735,13 +765,16 @@ impl Func {
                 .into_iter()
                 .enumerate()
                 .map(|(i, mut v)| {
-                    if let Some(doc) = returns.get(i) {
-                        v.doc(doc.as_str());
+                    if let Some((ty, doc)) = returns.get(i) {
+                        v.doc(doc.clone());
+                        if let Some(t) = ty {
+                            v.ty(t.clone());
+                        }
                     }
                     v
                 })
                 .collect(),
-            doc: doc.into_doc_comment()
+            doc: doc.into_doc_comment(),
         }
     }
 }
@@ -753,13 +786,13 @@ pub trait IntoDocComment {
 
 impl IntoDocComment for String {
     fn into_doc_comment(self) -> Option<Cow<'static, str>> {
-        Some(self.into())
+        (!self.trim().is_empty()).then_some(self.into())
     }
 }
 
 impl IntoDocComment for &str {
     fn into_doc_comment(self) -> Option<Cow<'static, str>> {
-        Some(self.to_string().into())
+        (!self.trim().is_empty()).then_some(self.to_string().into())
     }
 }
 
@@ -771,6 +804,11 @@ impl IntoDocComment for () {
 
 impl IntoDocComment for Option<String> {
     fn into_doc_comment(self) -> Option<Cow<'static, str>> {
-        self.map(|v| v.into())
+        self.and_then(|v| (!v.trim().is_empty()).then_some(v.into()))
+    }
+}
+impl IntoDocComment for Option<Cow<'static, str>> {
+    fn into_doc_comment(self) -> Option<Cow<'static, str>> {
+        self.and_then(|v| (!v.trim().is_empty()).then_some(v))
     }
 }

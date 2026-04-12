@@ -318,11 +318,11 @@ impl<'writer> DefinitionWriter<'writer> {
             });
         }
 
-        for ret in returns.iter() {
+        for (i, ret) in returns.iter().enumerate() {
             let ty = self.type_signature(&ret.ty)?;
             let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match doc {
-                Some(doc) => format!("--- @return {ty} {doc}"),
+                Some(doc) => format!("--- @return {ty} #{}: {doc}", i + 1),
                 None      => format!("--- @return {ty}"),
             });
         }
@@ -373,11 +373,11 @@ impl<'writer> DefinitionWriter<'writer> {
             });
         }
 
-        for ret in returns.iter() {
+        for (i, ret) in returns.iter().enumerate() {
             let ty = self.type_signature(&ret.ty)?;
             let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match doc {
-                Some(doc) => format!("--- @return {ty} {doc}"),
+                Some(doc) => format!("--- @return {ty} #{}: {doc}", i + 1),
                 None      => format!("--- @return {ty}"),
             });
         }

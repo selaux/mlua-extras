@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{proc_macro_error, abort};
 use syn::spanned::Spanned;
-use venial::{parse_item, Fields, Item};
+use venial::{Fields, Item, parse_item};
 
 #[proc_macro_error]
 #[proc_macro_derive(UserData)]
@@ -41,31 +41,78 @@ pub fn derive_user_data(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Typed, attributes(typed))]
 pub fn derive_typed(input: TokenStream) -> TokenStream {
     let input = TokenStream2::from(input);
-    let name = match parse_item(input.clone()) {
+    match parse_item(input.clone()) {
         Ok(Item::Struct(struct_type)) => {
-            struct_type.name.clone()
+            let name = struct_type.name.clone();
+            let label = name.to_string();
+            quote!(
+                impl mlua_extras::typed::Typed for #name {
+                    fn ty() -> mlua_extras::typed::Type {
+                        mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>())
+                    }
+
+                    fn as_param() -> mlua_extras::typed::Param {
+                        mlua_extras::typed::Param {
+                            doc: None,
+                            name: None,
+                            ty: mlua_extras::typed::Type::named(#label),
+                        }
+                    }
+                }
+            )
         },
         Ok(Item::Enum(enum_type)) => {
-            enum_type.name.clone()
+            let name = enum_type.name.clone();
+            let label = name.to_string();
+            let underscore_name = format!("_{name}");
+
+            let names = enum_type.variants.iter().map(|(variant, _)| format!("{label}{}", variant.name)).collect::<Vec<_>>();
+            let variants = enum_type.variants
+                .iter()
+                .map(|(variant, _punc)| {
+                    let name = format!("{label}{}", variant.name);
+                    quote!{
+                        (
+                            #name,
+                            mlua_extras::typed::Type::class(
+                                mlua_extras::typed::TypedClassBuilder::default()
+                                    .derive(#underscore_name)
+                            )
+                        )
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            // TODO: This should be a union alias
+            quote!(
+                impl mlua_extras::typed::Typed for #name {
+                    fn ty() -> mlua_extras::typed::Type {
+                        mlua_extras::typed::Type::r#union([
+                            #(mlua_extras::typed::Type::named(#names),)*
+                        ])
+                    }
+
+                    fn implicit() -> impl IntoIterator<Item=(&'static str, mlua_extras::typed::Type)> {
+                        [
+                            (
+                                #underscore_name,
+                                mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<Self>())
+                            ),
+                            #(#variants,)*
+                        ]
+                    }
+
+                    fn as_param() -> mlua_extras::typed::Param {
+                        mlua_extras::typed::Param {
+                            doc: None,
+                            name: None,
+                            ty: mlua_extras::typed::Type::named(#label),
+                        }
+                    }
+                }
+            )
         },
         Err(err) => abort!(err.span(), "{}", err),
         _ => abort!(input.span(), "only `struct` and `enum` types are supported for Typed")
-    };
-
-    let label = name.to_string();
-    quote!(
-        impl mlua_extras::typed::Typed for #name {
-            fn ty() -> mlua_extras::typed::Type {
-                mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>())
-            }
-
-            fn as_param() -> mlua_extras::typed::Param {
-                mlua_extras::typed::Param {
-                    doc: None,
-                    name: None,
-                    ty: mlua_extras::typed::Type::named(#label),
-                }
-            }
-        }
-    ).into()
+    }.into()
 }
