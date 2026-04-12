@@ -191,7 +191,7 @@ fn test_class_with_fields() {
         "declare class Player
 \t-- Player name
 \tname: string
-\tscore: integer
+\tscore: number
 end"
     );
 }
@@ -212,10 +212,10 @@ fn test_class_with_methods() {
     assert_eq!(
         out.trim(),
         "declare class Counter
-\tvalue: integer
-\tfunction add(self, param0: integer): ()
+\tvalue: number
+\tfunction add(self, param0: number): ()
 \t-- Get the current value
-\tfunction getValue(self): integer
+\tfunction getValue(self): number
 end"
     );
 }
@@ -276,7 +276,7 @@ fn test_class_with_meta_field() {
         out.trim(),
         "declare class Tracked
 \t-- Meta field
-\t__count: integer
+\t__count: number
 end"
     );
 }
@@ -307,7 +307,7 @@ fn test_map_type() {
             Type::map(Type::string(), Type::integer()),
         ),
     ));
-    assert_eq!(out.trim(), "export type Scores = { [string]: integer }");
+    assert_eq!(out.trim(), "export type Scores = { [string]: number }");
 }
 
 #[test]
@@ -323,7 +323,7 @@ fn test_table_type() {
     ));
     assert_eq!(
         out.trim(),
-        "export type Config = { host: string, port: integer }"
+        "export type Config = { host: string, port: number }"
     );
 }
 
@@ -357,7 +357,7 @@ fn test_tuple_homogeneous() {
             Type::tuple([Type::integer(), Type::integer()]),
         ),
     ));
-    assert_eq!(out.trim(), "export type Pair = { integer }");
+    assert_eq!(out.trim(), "export type Pair = { number }");
 }
 
 #[test]
@@ -370,7 +370,7 @@ fn test_tuple_heterogeneous() {
     ));
     assert_eq!(
         out.trim(),
-        "export type Mixed = { string | integer | boolean }"
+        "export type Mixed = { string | number | boolean }"
     );
 }
 
@@ -384,7 +384,7 @@ fn test_union_type() {
     ));
     assert_eq!(
         out.trim(),
-        "export type Multi = string | integer | boolean"
+        "export type Multi = string | number | boolean"
     );
 }
 
@@ -544,7 +544,7 @@ fn test_luau_lsp_class_fields_and_methods() {
         &out,
         r#"
 local _n: string = player.name
-local _s: integer = player.score
+local _s: number = player.score
 local _gn: string = player:getName()
 "#,
     );
@@ -784,7 +784,7 @@ end
 
 declare Factory: {
 \t-- A static factory method
-\tcreate: (param0: string) -> integer,
+\tcreate: (param0: string) -> number,
 }"
     );
 }
@@ -806,18 +806,17 @@ fn test_mismatch_heterogeneous_tuple_loses_position() {
     // an array whose element type is the union of all tuple types
     assert_eq!(
         out.trim(),
-        "export type Record = { string | integer | boolean }",
+        "export type Record = { string | number | boolean }",
         "Heterogeneous tuple should flatten to union array"
     );
 }
 
-/// Luau treats `integer` and `number` as distinct, incompatible types
-/// in definition files. `local x: number = some_integer` is a type
-/// error. The mlua-extras model maps Rust integer types (i32, u64, etc)
-/// to `integer` and float types (f32, f64) to `number`, which is
-/// faithful but means consumers must be precise about which they use.
+/// Luau recognizes `integer` as a type, but numeric literals are inferred
+/// as `number` and the two are mutually incompatible — you cannot assign a
+/// literal to `integer` or pass `integer` where `number` is expected. The
+/// Luau generator maps `Type::integer()` to `number` to avoid this.
 #[test]
-fn test_mismatch_integer_vs_number() {
+fn test_integer_maps_to_number() {
     let out = generate(single(
         with_value(
             Definition::start().register_as(
@@ -837,7 +836,7 @@ fn test_mismatch_integer_vs_number() {
         out.trim(),
         "declare class Stats
 \t-- An integer field
-\tcount: integer
+\tcount: number
 \t-- A float field
 \tratio: number
 end
@@ -849,8 +848,59 @@ declare stats: Stats"
     validate_with_luau_lsp(
         &out,
         r#"
-local _c: integer = stats.count
+local _c: number = stats.count
 local _r: number = stats.ratio
+"#,
+    );
+}
+
+/// Verifies that Rust integer types (mapped via `Type::integer()`) produce
+/// Luau `number` in function signatures and fields, so that passing numeric
+/// literals from Luau code does not cause type errors. Without the mapping,
+/// `declare function add(a: integer, b: integer): integer` would reject
+/// `add(1, 2)` because Luau infers `1` as `number`, and `number` is not
+/// assignable to `integer`.
+#[test]
+fn test_luau_lsp_integer_fields_accept_numeric_literals() {
+    let out = generate(single(
+        with_value(
+            Definition::start()
+                .register_as(
+                    "Inventory",
+                    Type::class(
+                        TypedClassBuilder::default()
+                            .field("count", Type::integer(), ())
+                            .field("weight", Type::number(), ())
+                            .method::<(i32,), ()>("addItems", ())
+                            .method::<(), i64>("total", ()),
+                    ),
+                )
+                .param("a", "")
+                .param("b", "")
+                .function::<(i32, i32), i32>("add", ()),
+            "inv",
+            Type::named("Inventory"),
+            None,
+        ),
+    ));
+
+    // The generated output should use `number` everywhere, not `integer`
+    assert!(
+        !out.contains("integer"),
+        "Luau output should not contain 'integer', got:\n{out}",
+    );
+
+    // Numeric literals (which Luau types as `number`) must be accepted
+    // without type errors in all positions: function args, method args,
+    // return values assigned to variables, and field access.
+    validate_with_luau_lsp(
+        &out,
+        r#"
+local _sum: number = add(1, 2)
+local _count: number = inv.count
+local _weight: number = inv.weight
+inv:addItems(5)
+local _t: number = inv:total()
 "#,
     );
 }
@@ -877,6 +927,6 @@ fn test_mismatch_enum_tuple_variants_flatten() {
     // The tuple variants become union-arrays, losing arity info
     assert_eq!(
         out.trim(),
-        "export type Payload = \"None\" | { integer | string } | { boolean }"
+        "export type Payload = \"None\" | { number | string } | { boolean }"
     );
 }
