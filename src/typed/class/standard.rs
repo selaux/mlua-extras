@@ -20,6 +20,8 @@ pub struct TypedClassBuilder {
     queued_params: Vec<(String, String)>,
     queued_returns: Vec<String>,
 
+    pub derives: Vec<String>,
+
     pub fields: BTreeMap<Index, Field>,
     pub static_fields: BTreeMap<Index, Field>,
     pub meta_fields: BTreeMap<Index, Field>,
@@ -222,6 +224,12 @@ impl TypedClassBuilder {
                 self.queued_returns.drain(..).collect(),
             ),
         );
+        self
+    }
+
+    /// Add a child class that this class derives
+    pub fn derives(mut self, parent: impl std::fmt::Display) -> Self {
+        self.derives.push(parent.to_string());
         self
     }
 }
@@ -501,6 +509,35 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         );
     }
 
+    fn add_index_meta_method<I, A, R, M>(&mut self, _: M)
+    where
+        I: TypedMultiValue,
+        A: FromLuaMulti + TypedMultiValue,
+        R: IntoLuaMulti + TypedMultiValue,
+        M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
+    {
+        let name: Cow<'static, str> = mlua::MetaMethod::Index.to_string().into();
+        self.meta_methods.insert(
+            name.into(),
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+        );
+
+        for (i, ty) in I::get_types().into_iter().enumerate() { 
+            self.fields.insert(
+                Index::from(i + 1),
+                // TODO: Update accessability to Field
+                Field {
+                    ty,
+                    doc: None,
+                }
+            );
+        }
+    }
+
     #[cfg(feature = "async")]
     fn add_async_method<S: Into<String>, A, R, M, MR>(&mut self, name: S, _: M)
     where
@@ -611,6 +648,35 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
                 self.queued_returns.drain(..).collect(),
             ),
         );
+    }
+
+    fn add_newindex_meta_method<I, A, R, M>(&mut self, _: M)
+    where
+        I: TypedMultiValue,
+        A: FromLuaMulti + TypedMultiValue,
+        R: IntoLuaMulti + TypedMultiValue,
+        M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
+    {
+        let name: Cow<'static, str> = mlua::MetaMethod::NewIndex.to_string().into();
+        self.meta_methods.insert(
+            name.into(),
+            Func::new::<A, R>(
+                self.queued_doc.take(),
+                self.queued_params.drain(..).collect(),
+                self.queued_returns.drain(..).collect(),
+            ),
+        );
+
+        for (i, ty) in I::get_types().into_iter().enumerate() { 
+            self.fields.insert(
+                Index::from(i + 1),
+                // TODO: Update accessability to Field
+                Field {
+                    ty,
+                    doc: None,
+                }
+            );
+        }
     }
 
     fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<String>, _: F)

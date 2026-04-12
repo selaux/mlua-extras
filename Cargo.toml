@@ -40,6 +40,10 @@ mlua = { version = "0.11.6", optional = true, default-features = false }
 strum = { version = "0.27.2", features = ["derive"], default-features = false }
 
 [[example]]
+name = "tuple"
+required-features = ["mlua"]
+
+[[example]]
 name = "path"
 required-features = ["mlua"]
 

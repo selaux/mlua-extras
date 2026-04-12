@@ -121,7 +121,11 @@ impl<'writer> DefinitionWriter<'writer> {
                     {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
-                    writeln!(buffer, "--- @class {}", definition.name)?;
+                    write!(buffer, "--- @class {}", definition.name)?;
+                    if !type_data.derives.is_empty() {
+                        write!(buffer, ": {}", type_data.derives.join(", "))?;
+                    }
+                    writeln!(buffer)?;
 
                     for (name, field) in type_data.static_fields.iter() {
                         if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {

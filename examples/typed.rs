@@ -1,9 +1,15 @@
 use std::path::PathBuf;
 
 use mlua_extras::{
-    Typed, UserData, extras::LuaExtras, mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, Value, Variadic}, typed::{
-        Type, TypedDataFields, TypedDataMethods, TypedUserData, generator::{Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator}
-    }
+    extras::LuaExtras,
+    mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, Value, Variadic},
+    typed::{
+        generator::{
+            Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator,
+        },
+        Type, TypedDataFields, TypedDataMethods, TypedUserData,
+    },
+    Typed, UserData,
 };
 use serde::Deserialize;
 
@@ -119,22 +125,19 @@ impl TypedUserData for Example {
         methods
             .document("print all items")
             .param("...", "")
-            .add_function(
-                "printAll",
-                |_lua, all: Variadic<String>| {
-                    println!(
-                        "{}",
-                        all.iter().map(|v| v.as_str()).collect::<Vec<_>>().join(" ")
-                    );
-                    Ok(())
-                },
-            );
+            .add_function("printAll", |_lua, all: Variadic<String>| {
+                println!(
+                    "{}",
+                    all.iter().map(|v| v.as_str()).collect::<Vec<_>>().join(" ")
+                );
+                Ok(())
+            });
 
         methods
             .document("Log a specific format with any lua types")
             .param("format", "String to pass to the formatter.")
             .param("...", "Arguments to pass to the formatter.")
-            .add_function("LogAny", |_, _args: (String, Variadic<Value>)| { Ok(()) });
+            .add_function("LogAny", |_, _args: (String, Variadic<Value>)| Ok(()));
 
         methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| {
             Ok(format!("{this:?}"))
@@ -162,15 +165,17 @@ fn main() -> mlua::Result<()> {
     // ===== Generate Types and Definition Files =====
 
     let definitions: Definitions = Definitions::start()
-        .define("init", Definition::start()
-            .register::<SystemColor>("System")
-            .register::<Color>("Color")
-            .register::<Example>("Example")
-            .value::<Example>("example")
-            .param("name", "Name of the person to greet")
-            .function::<String, ()>("greet", ())
-            .param("color", "Color to print to stdout")
-            .function::<Color, ()>("printColor", ())
+        .define(
+            "init",
+            Definition::start()
+                .register::<SystemColor>("System")
+                .register::<Color>("Color")
+                .register::<Example>("Example")
+                .value::<Example>("example")
+                .param("name", "Name of the person to greet")
+                .function::<String, ()>("greet", ())
+                .param("color", "Color to print to stdout")
+                .function::<Color, ()>("printColor", ()),
         )
         .finish();
 
@@ -222,7 +227,10 @@ printColor("Blue")
         }
     }
 
-    println!("{:#?}", Type::string() | "literal" | true | 0 | [Type::string(), Type::nil(), Type::literal(3)]);
+    println!(
+        "{:#?}",
+        Type::string() | "literal" | true | 0 | [Type::string(), Type::nil(), Type::literal(3)]
+    );
 
     Ok(())
 }

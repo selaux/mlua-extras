@@ -104,6 +104,24 @@ pub trait TypedDataMethods<T> {
         F: 'static + MaybeSend + Fn(Lua, A) -> FR,
         FR: 'static + MaybeSend + std::future::Future<Output = mlua::Result<R>>;
 
+    /// Shorthand for lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
+    /// for the `__index` meta method. An additional ()
+    fn add_index_meta_method<I, A, R, M>(&mut self, method: M)
+    where
+        I: TypedMultiValue,
+        A: FromLuaMulti + TypedMultiValue,
+        R: IntoLuaMulti + TypedMultiValue,
+        M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>;
+
+    /// Shorthand for lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
+    /// for the `__index` meta method. An additional ()
+    fn add_newindex_meta_method<I, A, R, M>(&mut self, method: M)
+    where
+        I: TypedMultiValue,
+        A: FromLuaMulti + TypedMultiValue,
+        R: IntoLuaMulti + TypedMultiValue,
+        M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>;
+
     ///Exposes a meta method to lua [http://lua-users.org/wiki/MetatableEvents](http://lua-users.org/wiki/MetatableEvents)
     fn add_meta_method<A, R, M>(&mut self, meta: impl Into<String>, method: M)
     where

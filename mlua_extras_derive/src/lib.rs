@@ -41,76 +41,31 @@ pub fn derive_user_data(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Typed, attributes(typed))]
 pub fn derive_typed(input: TokenStream) -> TokenStream {
     let input = TokenStream2::from(input);
-    match parse_item(input.clone()) {
+    let name = match parse_item(input.clone()) {
         Ok(Item::Struct(struct_type)) => {
-            let name = struct_type.name.clone();
-            let label = name.to_string();
-            quote!(
-                impl mlua_extras::typed::Typed for #name {
-                    fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>())
-                    }
-
-                    fn as_param() -> mlua_extras::typed::Param {
-                        mlua_extras::typed::Param {
-                            doc: None,
-                            name: None,
-                            ty: mlua_extras::typed::Type::named(#label),
-                        }
-                    }
-                }
-            )
+            struct_type.name.clone()
         },
         Ok(Item::Enum(enum_type)) => {
-            let variants = enum_type.variants
-                .iter()
-                .map(|(variant, _punc)| {
-                    let name = format!("\"{}\"", variant.name);
-                    match &variant.fields {
-                        Fields::Unit => quote!{ mlua_extras::typed::Type::Single(#name.into()) },
-                        Fields::Tuple(tf) => {
-                            let tuple_values = tf.fields.iter().map(|(field, _)| {
-                                let ty = field.ty.clone();
-                                quote!{ <#ty as mlua_extras::typed::Typed>::ty() }
-                            }).collect::<Vec<_>>();
-
-                            if tuple_values.len() == 1 {
-                                let first = tuple_values.first().unwrap();
-                                quote!{ #first }
-                            } else {
-                                quote!{ mlua_extras::typed::Type::Tuple(Vec::from([
-                                        #(#tuple_values,)*
-                                ])) }
-                            }
-                        },
-                        Fields::Named(named) => {
-                            let tuple_values = named.fields.iter().map(|(field, _)| {
-                                let name = field.name.to_string();
-                                let ty = field.ty.clone();
-                                quote!{ (mlua_extras::typed::Index::from(#name), <#ty as mlua_extras::typed::Typed>::ty()) }
-                            }).collect::<Vec<_>>();
-                            quote!{ mlua_extras::typed::Type::Table(std::collections::BTreeMap::from([
-                                    #(#tuple_values,)*
-                            ])) }
-                        }
-                    }
-                    
-                })
-                .collect::<Vec<_>>();
-
-            // TODO: This should be a union alias
-            let name = enum_type.name.clone();
-            quote!(
-                impl mlua_extras::typed::Typed for #name {
-                    fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::r#enum(
-                            [ #(#variants,)* ]
-                        )
-                    }
-                }
-            )
+            enum_type.name.clone()
         },
         Err(err) => abort!(err.span(), "{}", err),
         _ => abort!(input.span(), "only `struct` and `enum` types are supported for Typed")
-    }.into()
+    };
+
+    let label = name.to_string();
+    quote!(
+        impl mlua_extras::typed::Typed for #name {
+            fn ty() -> mlua_extras::typed::Type {
+                mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>())
+            }
+
+            fn as_param() -> mlua_extras::typed::Param {
+                mlua_extras::typed::Param {
+                    doc: None,
+                    name: None,
+                    ty: mlua_extras::typed::Type::named(#label),
+                }
+            }
+        }
+    ).into()
 }
