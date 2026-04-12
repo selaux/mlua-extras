@@ -299,9 +299,6 @@ function greet(name) end"
 
 #[test]
 fn test_function_unnamed_params() {
-    // FIXME: params and returns without doc comments get a trailing space in the
-    // annotation line (e.g. "--- @param param0 string " with a trailing space)
-    // because the format string always interpolates the doc even when it is empty.
     let out = generate(single(
         Definition::start().function::<(String, i64), ()>("log", ()),
     ));
@@ -309,8 +306,8 @@ fn test_function_unnamed_params() {
         out.trim(),
         "--- @meta
 
---- @param param0 string 
---- @param param1 integer 
+--- @param param0 string
+--- @param param1 integer
 function log(param0, param1) end"
     );
 }
@@ -322,13 +319,12 @@ fn test_function_with_return() {
             .param("name", "")
             .function::<String, String>("greet", ()),
     ));
-    // FIXME: trailing space on @param and @return lines when doc is empty.
     assert_eq!(
         out.trim(),
         "--- @meta
 
---- @param name string 
---- @return string 
+--- @param name string
+--- @return string
 function greet(name) end"
     );
 }
@@ -338,14 +334,13 @@ fn test_function_multi_return() {
     let out = generate(single(
         Definition::start().function::<String, (bool, String)>("parse", ()),
     ));
-    // FIXME: trailing spaces on @param and @return lines with no doc.
     assert_eq!(
         out.trim(),
         "--- @meta
 
---- @param param0 string 
---- @return boolean 
---- @return string 
+--- @param param0 string
+--- @return boolean
+--- @return string
 function parse(param0) end"
     );
 }
@@ -357,14 +352,13 @@ fn test_function_with_doc() {
             .document("Greet someone\nThis is multiline")
             .function::<String, ()>("greet", ()),
     ));
-    // FIXME: trailing space on @param line with no doc.
     assert_eq!(
         out.trim(),
         "--- @meta
 
 --- Greet someone
 --- This is multiline
---- @param param0 string 
+--- @param param0 string
 function greet(param0) end"
     );
 }
@@ -474,7 +468,6 @@ fn test_class_with_method_no_extra_params() {
             ),
         ),
     ));
-    // FIXME: trailing space on "--- @return string " when no return doc is provided.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -483,7 +476,7 @@ fn test_class_with_method_no_extra_params() {
 local _CLASS_Foo_ = {
   --- Get the value
   --- @param self Foo
-  --- @return string 
+  --- @return string
   getValue = function(self) end,
 }"
     );
@@ -500,7 +493,6 @@ fn test_class_with_method_with_params() {
             ),
         ),
     ));
-    // FIXME: trailing spaces on @param lines with no doc.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -508,7 +500,7 @@ fn test_class_with_method_with_params() {
 --- @class Counter
 local _CLASS_Counter_ = {
   --- @param self Counter
-  --- @param param0 integer 
+  --- @param param0 integer
   add = function(self, param0) end,
 }"
     );
@@ -525,7 +517,6 @@ fn test_class_with_static_function() {
             ),
         ),
     ));
-    // FIXME: trailing spaces on @param and @return lines with no doc.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -533,8 +524,8 @@ fn test_class_with_static_function() {
 --- @class Utils
 local _CLASS_Utils_ = {
   --- A factory
-  --- @param param0 string 
-  --- @return integer 
+  --- @param param0 string
+  --- @return integer
   create = function(param0) end,
 }"
     );
@@ -552,7 +543,6 @@ fn test_class_fields_and_methods_combined() {
             ),
         ),
     ));
-    // FIXME: trailing space on "--- @return string " when no return doc.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -561,7 +551,7 @@ fn test_class_fields_and_methods_combined() {
 --- @field name string
 local _CLASS_Player_ = {
   --- @param self Player
-  --- @return string 
+  --- @return string
   getName = function(self) end,
 }"
     );
@@ -578,8 +568,6 @@ fn test_class_with_meta_field() {
             ),
         ),
     ));
-    // FIXME: the --- @type and assignment lines inside __metatable are not
-    // indented — they should have 4 spaces to sit inside the __metatable block.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -588,8 +576,8 @@ fn test_class_with_meta_field() {
 local _CLASS_Tracked_ = {
   __metatable = {
     --- Meta count
---- @type integer
-__count = nil,
+    --- @type integer
+    __count = nil,
   }
 }"
     );
@@ -607,7 +595,6 @@ fn test_class_with_meta_method() {
             ),
         ),
     ));
-    // FIXME: trailing space on "--- @return string " when no return doc.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -617,7 +604,7 @@ fn test_class_with_meta_method() {
 local _CLASS_Obj_ = {
   __metatable = {
     --- @param self Obj
-    --- @return string 
+    --- @return string
     __tostring = function(self) end,
   }
 }"
@@ -635,7 +622,6 @@ fn test_class_with_meta_function() {
             ),
         ),
     ));
-    // FIXME: trailing spaces on @param and @return lines with no doc.
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -643,8 +629,8 @@ fn test_class_with_meta_function() {
 --- @class Indexed
 local _CLASS_Indexed_ = {
   __metatable = {
-    --- @param param0 string 
-    --- @return string 
+    --- @param param0 string
+    --- @return string
     __index = function(param0) end,
   }
 }"
@@ -763,9 +749,6 @@ fn test_type_sig_union() {
 
 #[test]
 fn test_type_sig_function_inline() {
-    // FIXME: the fun() inline type signature only emits parameter names, not
-    // their types. `fun(x)` is emitted instead of `fun(x: number)`, causing
-    // parameter type information to be silently dropped.
     let out = generate(single(
         Definition::start().register_as(
             "Handler",
@@ -793,7 +776,7 @@ fn test_type_sig_function_inline() {
         "--- @meta
 
 --- @class Handler
---- @field callback fun(x): boolean"
+--- @field callback fun(x: number): boolean"
     );
 }
 

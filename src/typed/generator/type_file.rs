@@ -192,8 +192,8 @@ impl<'writer> DefinitionWriter<'writer> {
                                     if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
                                         writeln!(buffer, "    {}", docs.join("\n    "))?;
                                     }
-                                    writeln!(buffer, "--- @type {}", self.type_signature(&field.ty)?)?;
-                                    writeln!(buffer, "{name} = nil,")?;
+                                    writeln!(buffer, "    --- @type {}", self.type_signature(&field.ty)?)?;
+                                    writeln!(buffer, "    {name} = nil,")?;
                                 }
 
                                 for (name, func) in type_data.meta_functions.iter() {
@@ -304,16 +304,23 @@ impl<'writer> DefinitionWriter<'writer> {
         let mut result = Vec::new();
 
         for (i, param) in params.iter().enumerate() {
-            let doc = param.doc.as_deref().unwrap_or_default();
-            result.push(match param.name.as_deref() {
-                Some(name) => format!("--- @param {name} {} {doc}", self.type_signature(&param.ty)?),
-                None => format!("--- @param param{i} {} {doc}", self.type_signature(&param.ty)?),
+            let ty = self.type_signature(&param.ty)?;
+            let doc = param.doc.as_deref().filter(|d| !d.is_empty());
+            result.push(match (param.name.as_deref(), doc) {
+                (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
+                (Some(name), None)      => format!("--- @param {name} {ty}"),
+                (None, Some(doc))       => format!("--- @param param{i} {ty} {doc}"),
+                (None, None)            => format!("--- @param param{i} {ty}"),
             });
         }
 
         for ret in returns.iter() {
-            let doc = ret.doc.as_deref().unwrap_or_default();
-            result.push(format!("--- @return {} {doc}", self.type_signature(&ret.ty)?));
+            let ty = self.type_signature(&ret.ty)?;
+            let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
+            result.push(match doc {
+                Some(doc) => format!("--- @return {ty} {doc}"),
+                None      => format!("--- @return {ty}"),
+            });
         }
 
         result.push(format!(
@@ -352,16 +359,23 @@ impl<'writer> DefinitionWriter<'writer> {
     ) -> mlua::Result<Vec<String>> {
         let mut result = Vec::from([format!("--- @param self {class}")]);
         for (i, param) in params.iter().enumerate() {
-            let doc = param.doc.as_deref().unwrap_or_default();
-            result.push(match param.name.as_deref() {
-                Some(name) => format!("--- @param {name} {} {doc}", self.type_signature(&param.ty)?),
-                None => format!("--- @param param{i} {} {doc}", self.type_signature(&param.ty)?),
+            let ty = self.type_signature(&param.ty)?;
+            let doc = param.doc.as_deref().filter(|d| !d.is_empty());
+            result.push(match (param.name.as_deref(), doc) {
+                (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
+                (Some(name), None)      => format!("--- @param {name} {ty}"),
+                (None, Some(doc))       => format!("--- @param param{i} {ty} {doc}"),
+                (None, None)            => format!("--- @param param{i} {ty}"),
             });
         }
 
         for ret in returns.iter() {
-            let doc = ret.doc.as_deref().unwrap_or_default();
-            result.push(format!("--- @return {} {doc}", self.type_signature(&ret.ty)?));
+            let ty = self.type_signature(&ret.ty)?;
+            let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
+            result.push(match doc {
+                Some(doc) => format!("--- @return {ty} {doc}"),
+                None      => format!("--- @return {ty}"),
+            });
         }
 
         result.push(format!(
@@ -429,12 +443,12 @@ impl<'writer> DefinitionWriter<'writer> {
                     .iter()
                     .enumerate()
                     .map(|(i, v)| {
-                        v.name
-                            .as_ref()
-                            .map(|v| v.to_string())
-                            .unwrap_or(format!("param{i}"))
+                        let name = v.name.as_ref()
+                            .map(|n| n.to_string())
+                            .unwrap_or(format!("param{i}"));
+                        Ok(format!("{name}: {}", self.type_signature(&v.ty)?))
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<mlua::Result<Vec<_>>>()?
                     .join(", "),
                     if returns.is_empty() {
                         String::new()
