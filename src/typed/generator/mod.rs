@@ -17,6 +17,7 @@ mod luau_type_file;
 pub use luau_type_file::LuauDefinitionFileGenerator;
 
 mod luau_type_file_tests;
+mod type_file_tests;
 
 /// Representation of a type that is defined in the definition file.
 ///
