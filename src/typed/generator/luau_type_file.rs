@@ -294,7 +294,12 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     ))
                 }
             },
-            Type::Single(value) => value.to_string(),
+            Type::Single(value) => {
+                // Luau recognizes `integer` as a type, but numeric literals
+                // are inferred as `number` and the two are mutually incompatible,
+                // making `integer` unusable in practice. Emit `number` instead.
+                if value == "integer" { "number".to_string() } else { value.to_string() }
+            }
             Type::Tuple(types) => {
                 // Luau doesn't support integer literal keys in table types.
                 // If all element types are the same, emit as {T}.
