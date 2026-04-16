@@ -26,8 +26,10 @@ pub struct TypedClassBuilder {
     pub fields: BTreeMap<Index, Field>,
     pub static_fields: BTreeMap<Index, Field>,
     pub meta_fields: BTreeMap<Index, Field>,
+
     pub methods: BTreeMap<Index, Func>,
     pub meta_methods: BTreeMap<Index, Func>,
+
     pub functions: BTreeMap<Index, Func>,
     pub meta_functions: BTreeMap<Index, Func>,
 }
@@ -45,6 +47,36 @@ impl TypedClassBuilder {
         T::add_fields(&mut gen);
         T::add_methods(&mut gen);
         gen
+    }
+
+    /// Skip/Remove a field field from the class definition
+    pub fn skip_field(mut self, idx: impl Into<Index>) -> Self {
+        self.fields.remove(&idx.into());
+        self
+    }
+
+    /// Skip/Remove a method from the class definition
+    pub fn skip_method(mut self, idx: impl Into<Index>) -> Self {
+        self.methods.remove(&idx.into());
+        self
+    }
+
+    /// Skip/Remove a meta method from the class definition
+    pub fn skip_meta_method(mut self, idx: impl Into<Index>) -> Self {
+        self.meta_methods.remove(&idx.into());
+        self
+    }
+
+    /// Skip/Remove a function from the class definition
+    pub fn skip_function(mut self, idx: impl Into<Index>) -> Self {
+        self.functions.remove(&idx.into());
+        self
+    }
+
+    /// Skip/Remove a meta function from the class definition
+    pub fn skip_meta_function(mut self, idx: impl Into<Index>) -> Self {
+        self.meta_functions.remove(&idx.into());
+        self
     }
 
     /// Check if any of there are any meta fields, functions, or methods present
