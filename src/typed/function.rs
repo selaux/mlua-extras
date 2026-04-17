@@ -242,10 +242,7 @@ where
     fn ty() -> Type {
         Type::Function {
             params: Params::get_types_as_params(),
-            returns: Response::get_types()
-                .into_iter()
-                .map(|ty| Return { doc: None, ty })
-                .collect(),
+            returns: Response::get_types_as_returns()
         }
     }
 }

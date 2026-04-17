@@ -17,8 +17,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use function::Return;
-pub use function::{Param, TypedFunction};
+pub use function::{Param, Return, TypedFunction};
 
 use mlua::{IntoLua, MetaMethod, Value, Variadic};
 
@@ -37,6 +36,14 @@ pub trait Typed {
         Param {
             doc: None,
             name: None,
+            ty: Self::ty(),
+        }
+    }
+
+    /// Get the type as a function return
+    fn as_return() -> Return {
+        Return {
+            doc: None,
             ty: Self::ty(),
         }
     }
@@ -648,28 +655,18 @@ pub trait TypedMultiValue {
     }
 
     fn get_types_as_returns() -> Vec<Return> {
-        Self::get_types_as_params()
-            .into_iter()
-            .map(|v| Return {
-                doc: None,
-                ty: v.ty,
-            })
-            .collect::<Vec<_>>()
+        Vec::new()
     }
 
     /// Gets the type representations as used for function parameters
-    fn get_types_as_params() -> Vec<Param>;
+    fn get_types_as_params() -> Vec<Param> {
+        Vec::new()
+    }
 }
 
 macro_rules! impl_typed_multi_value {
     () => {
-        impl TypedMultiValue for () {
-            #[allow(unused_mut)]
-            #[allow(non_snake_case)]
-            fn get_types_as_params() -> Vec<Param> {
-                Vec::new()
-            }
-        }
+        impl TypedMultiValue for () {}
     };
     ($($name:ident) +) => {
         impl<$($name,)* > TypedMultiValue for ($($name,)*)
@@ -682,6 +679,14 @@ macro_rules! impl_typed_multi_value {
                     $($name::as_param(),)*
                 ])
             }
+
+            #[allow(unused_mut)]
+            #[allow(non_snake_case)]
+            fn get_types_as_returns() -> Vec<Return> {
+                Vec::from([
+                    $($name::as_return(),)*
+                ])
+            }
         }
     };
 }
@@ -692,6 +697,10 @@ where
 {
     fn get_types_as_params() -> Vec<Param> {
         Vec::from([A::as_param()])
+    }
+
+    fn get_types_as_returns() -> Vec<Return> {
+        Vec::from([A::as_return()])
     }
 }
 

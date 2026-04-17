@@ -306,9 +306,9 @@ fn test_function_unnamed_params() {
         out.trim(),
         "--- @meta
 
---- @param param0 string
---- @param param1 integer
-function log(param0, param1) end"
+--- @param param1 string
+--- @param param2 integer
+function log(param1, param2) end"
     );
 }
 
@@ -338,10 +338,10 @@ fn test_function_multi_return() {
         out.trim(),
         "--- @meta
 
---- @param param0 string
+--- @param param1 string
 --- @return boolean
 --- @return string
-function parse(param0) end"
+function parse(param1) end"
     );
 }
 
@@ -358,8 +358,8 @@ fn test_function_with_doc() {
 
 --- Greet someone
 --- This is multiline
---- @param param0 string
-function greet(param0) end"
+--- @param param1 string
+function greet(param1) end"
     );
 }
 
@@ -500,8 +500,8 @@ fn test_class_with_method_with_params() {
 --- @class Counter
 local _CLASS_Counter_ = {
   --- @param self Counter
-  --- @param param0 integer
-  add = function(self, param0) end,
+  --- @param param1 integer
+  add = function(self, param1) end,
 }"
     );
 }
@@ -524,9 +524,9 @@ fn test_class_with_static_function() {
 --- @class Utils
 local _CLASS_Utils_ = {
   --- A factory
-  --- @param param0 string
+  --- @param param1 string
   --- @return integer
-  create = function(param0) end,
+  create = function(param1) end,
 }"
     );
 }
@@ -629,9 +629,9 @@ fn test_class_with_meta_function() {
 --- @class Indexed
 local _CLASS_Indexed_ = {
   __metatable = {
-    --- @param param0 string
+    --- @param param1 string
     --- @return string
-    __index = function(param0) end,
+    __index = function(param1) end,
   }
 }"
     );

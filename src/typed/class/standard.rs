@@ -293,7 +293,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         V: IntoLua + Clone + 'static + Typed,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(V::ty());
+        let ty = self.queued_ty.take().unwrap_or(V::as_param().ty);
         self.static_fields
             .entry(name.into())
             .and_modify({
@@ -316,7 +316,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         F: 'static + MaybeSend + FnMut(&Lua, AnyUserData, A) -> mlua::Result<()>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(A::ty());
+        let ty = self.queued_ty.take().unwrap_or(A::as_param().ty);
         self.static_fields
             .entry(name.into())
             .and_modify({
@@ -339,7 +339,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         F: 'static + MaybeSend + Fn(&Lua, AnyUserData) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(R::ty());
+        let ty = self.queued_ty.take().unwrap_or(R::as_return().ty);
         self.static_fields
             .entry(name.into())
             .and_modify({
@@ -364,7 +364,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         SET: 'static + MaybeSend + Fn(&Lua, AnyUserData, A) -> mlua::Result<()>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(A::ty() | R::ty());
+        let ty = self.queued_ty.take().unwrap_or(A::as_param().ty | R::as_return().ty);
         self.static_fields
             .entry(name.into())
             .and_modify({
@@ -387,7 +387,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<()>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(A::ty());
+        let ty = self.queued_ty.take().unwrap_or(A::as_param().ty);
         self.fields
             .entry(name.into())
             .and_modify({
@@ -410,7 +410,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         M: 'static + MaybeSend + Fn(&Lua, &T) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(R::ty());
+        let ty = self.queued_ty.take().unwrap_or(R::as_return().ty);
         self.fields
             .entry(name.into())
             .and_modify({
@@ -435,7 +435,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         SET: 'static + MaybeSend + Fn(&Lua, &mut T, A) -> mlua::Result<()>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(A::ty() | R::ty());
+        let ty = self.queued_ty.take().unwrap_or(A::as_param().ty | R::as_return().ty);
         self.fields
             .entry(name.into())
             .and_modify({
@@ -456,7 +456,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         V: IntoLua + Typed + 'static,
     {
         let name: Cow<'static, str> = meta.into().into();
-        let ty = self.queued_ty.take().unwrap_or(V::ty());
+        let ty = self.queued_ty.take().unwrap_or(V::as_param().ty);
         self.meta_fields
             .entry(name.into())
             .and_modify({
@@ -478,7 +478,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             R: IntoLua + Typed {
 
         let name: Cow<'static, str> = meta.into().into();
-        let ty = self.queued_ty.take().unwrap_or(R::ty());
+        let ty = self.queued_ty.take().unwrap_or(R::as_return().ty);
         self.meta_fields
             .entry(name.into())
             .and_modify({
@@ -525,7 +525,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
     }
 
     fn index<I: Typed>(&mut self, idx: usize, doc: impl IntoDocComment) -> &mut Self {
-        self.fields.insert(idx.into(), Field { ty: I::ty(), doc: doc.into_doc_comment() });
+        self.fields.insert(idx.into(), Field { ty: I::as_param().ty, doc: doc.into_doc_comment() });
         self
     }
 

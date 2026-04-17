@@ -25,6 +25,7 @@ enum SystemColor {
     Magenta,
     White,
 }
+impl TypedUserData for SystemColor {}
 
 #[derive(Debug, Clone, Copy, Typed, UserData, Deserialize)]
 #[serde(untagged)]
@@ -184,8 +185,8 @@ fn main() -> mlua::Result<()> {
         std::fs::create_dir_all(&types_path).unwrap();
     }
 
-    let gen = DefinitionFileGenerator::new(definitions.clone());
-    for (name, writer) in gen.iter() {
+    let dfg = DefinitionFileGenerator::new(definitions.clone());
+    for (name, writer) in dfg.iter() {
         println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
         writer.write_file(types_path.join(name)).unwrap();
     }
