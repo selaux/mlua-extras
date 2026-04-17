@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{proc_macro_error, abort};
 use syn::spanned::Spanned;
-use venial::{parse_item, Fields, Item};
+use venial::{Item, parse_item};
 
 #[proc_macro_error]
 #[proc_macro_derive(UserData)]
@@ -58,54 +58,76 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                             ty: mlua_extras::typed::Type::named(#label),
                         }
                     }
+
+                    fn as_return() -> mlua_extras::typed::Return {
+                        mlua_extras::typed::Return {
+                            doc: None,
+                            ty: mlua_extras::typed::Type::named(#label),
+                        }
+                    }
                 }
             )
         },
         Ok(Item::Enum(enum_type)) => {
+            let name = enum_type.name.clone();
+            let label = name.to_string();
+            let underscore_name = format!("_{name}");
+
+            let names = enum_type.variants.iter().map(|(variant, _)| variant.name.to_string()).collect::<Vec<_>>();
+            let named = enum_type.variants.iter().map(|(variant, _)| format!("{label}{}", variant.name)).collect::<Vec<_>>();
             let variants = enum_type.variants
                 .iter()
                 .map(|(variant, _punc)| {
-                    let name = format!("\"{}\"", variant.name);
-                    match &variant.fields {
-                        Fields::Unit => quote!{ mlua_extras::typed::Type::Single(#name.into()) },
-                        Fields::Tuple(tf) => {
-                            let tuple_values = tf.fields.iter().map(|(field, _)| {
-                                let ty = field.ty.clone();
-                                quote!{ <#ty as mlua_extras::typed::Typed>::ty() }
-                            }).collect::<Vec<_>>();
-
-                            if tuple_values.len() == 1 {
-                                let first = tuple_values.first().unwrap();
-                                quote!{ #first }
-                            } else {
-                                quote!{ mlua_extras::typed::Type::Tuple(Vec::from([
-                                        #(#tuple_values,)*
-                                ])) }
-                            }
-                        },
-                        Fields::Named(named) => {
-                            let tuple_values = named.fields.iter().map(|(field, _)| {
-                                let name = field.name.to_string();
-                                let ty = field.ty.clone();
-                                quote!{ (mlua_extras::typed::Index::from(#name), <#ty as mlua_extras::typed::Typed>::ty()) }
-                            }).collect::<Vec<_>>();
-                            quote!{ mlua_extras::typed::Type::Table(std::collections::BTreeMap::from([
-                                    #(#tuple_values,)*
-                            ])) }
-                        }
+                    let name = format!("{label}{}", variant.name);
+                    quote!{
+                        (
+                            #name,
+                            mlua_extras::typed::Type::class(
+                                mlua_extras::typed::TypedClassBuilder::default()
+                                    .derive(#underscore_name)
+                            )
+                        )
                     }
-                    
                 })
                 .collect::<Vec<_>>();
 
+            let enum_alt = format!("{label}Enum");
             // TODO: This should be a union alias
-            let name = enum_type.name.clone();
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::r#enum(
-                            [ #(#variants,)* ]
-                        )
+                        mlua_extras::typed::Type::r#union([
+                            #(mlua_extras::typed::Type::named(#named),)*
+                        ])
+                    }
+
+                    fn implicit() -> impl IntoIterator<Item=(&'static str, mlua_extras::typed::Type)> {
+                        [
+                            (
+                                #enum_alt,
+                                mlua_extras::typed::Type::r#enum(vec![#(mlua_extras::typed::Type::literal(#names),)*])
+                            ),
+                            (
+                                #underscore_name,
+                                mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<Self>())
+                            ),
+                            #(#variants,)*
+                        ]
+                    }
+
+                    fn as_param() -> mlua_extras::typed::Param {
+                        mlua_extras::typed::Param {
+                            doc: None,
+                            name: None,
+                            ty: mlua_extras::typed::Type::named(#label),
+                        }
+                    }
+
+                    fn as_return() -> mlua_extras::typed::Return {
+                        mlua_extras::typed::Return {
+                            doc: None,
+                            ty: mlua_extras::typed::Type::named(#label),
+                        }
                     }
                 }
             )

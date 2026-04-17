@@ -2,9 +2,9 @@ use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 #[cfg(feature = "async")]
 use mlua::{UserDataRef, UserDataRefMut};
 
-use crate::MaybeSend;
+use crate::{MaybeSend, typed::IntoDocComment};
 
-use super::{Typed, TypedMultiValue};
+use super::{Typed, TypedMultiValue, Type};
 
 mod wrapped;
 mod standard;
@@ -133,23 +133,46 @@ pub trait TypedDataMethods<T> {
         F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>;
 
     /// Adds documentation to the next method/function that gets added
-    fn document(&mut self, doc: &str) -> &mut Self;
+    fn document(&mut self, doc: impl IntoDocComment) -> &mut Self;
 
     /// Adds a param name and doc comment to the next method/function that gets added.
     /// 
     /// These will be applied to the params in the order they were defined.
-    fn param<S: std::fmt::Display, D: std::fmt::Display>(&mut self, name: S, doc: D) -> &mut Self;
+    fn param(&mut self, name: impl std::fmt::Display, doc: impl IntoDocComment) -> &mut Self;
 
-    /// Adds a return doc comment tot he next method/function that gets added.
+    /// Adds a param name and doc comment to the next method/function that gets added.
+    /// Will also add an override type to the param.
+    /// 
+    /// These will be applied to the params in the order they were defined.
+    fn param_as(&mut self, ty: impl Into<Type>, name: impl std::fmt::Display, doc: impl IntoDocComment) -> &mut Self;
+
+    /// Adds a return doc comment to the next method/function that gets added.
     /// 
     /// These will be applied to the returns in the order they were defined.
-    fn ret<S: std::fmt::Display>(&mut self, doc: S) -> &mut Self;
+    fn ret(&mut self, doc: impl IntoDocComment) -> &mut Self;
+    
+    /// Adds a return doc comment to the next method/function that gets added.
+    /// Will also add an override type to the return.
+    /// 
+    /// These will be applied to the returns in the order they were defined.
+    fn ret_as(&mut self, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self;
+
+    /// Adds an index field with a type and doc comment to the class definition
+    fn index<I: Typed>(&mut self, idx: usize, doc: impl IntoDocComment) -> &mut Self;
+
+    /// Adds an index field with a type and doc comment to the class definition
+    fn index_as(&mut self, idx: usize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self;
 }
 
 /// Typed variant of [`mlua::UserDataFields`]
 pub trait TypedDataFields<T> {
     ///Adds documentation to the next field that gets added
-    fn document(&mut self, doc: &str) -> &mut Self;
+    fn document(&mut self, doc: impl IntoDocComment) -> &mut Self;
+
+    /// Adds a type to the queued overrides.
+    /// 
+    /// It will be used on the next field and will override the type that is automatically used.
+    fn coerce(&mut self, ty: impl Into<Type>) -> &mut Self;
 
     /// Typed version of [add_field](mlua::UserDataFields::add_field)
     fn add_field<V>(&mut self, name: impl Into<String>, value: V)

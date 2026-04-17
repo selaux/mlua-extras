@@ -121,7 +121,11 @@ impl<'writer> DefinitionWriter<'writer> {
                     {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
-                    writeln!(buffer, "--- @class {}", definition.name)?;
+                    write!(buffer, "--- @class {}", definition.name)?;
+                    if !type_data.derives.is_empty() {
+                        write!(buffer, ": {}", type_data.derives.join(", "))?;
+                    }
+                    writeln!(buffer)?;
 
                     for (name, field) in type_data.static_fields.iter() {
                         if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
@@ -309,16 +313,16 @@ impl<'writer> DefinitionWriter<'writer> {
             result.push(match (param.name.as_deref(), doc) {
                 (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
                 (Some(name), None)      => format!("--- @param {name} {ty}"),
-                (None, Some(doc))       => format!("--- @param param{i} {ty} {doc}"),
-                (None, None)            => format!("--- @param param{i} {ty}"),
+                (None, Some(doc))       => format!("--- @param param{} {ty} {doc}", i + 1),
+                (None, None)            => format!("--- @param param{} {ty}", i + 1),
             });
         }
 
-        for ret in returns.iter() {
+        for (i, ret) in returns.iter().enumerate() {
             let ty = self.type_signature(&ret.ty)?;
             let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match doc {
-                Some(doc) => format!("--- @return {ty} {doc}"),
+                Some(doc) => format!("--- @return {ty} #{}: {doc}", i + 1),
                 None      => format!("--- @return {ty}"),
             });
         }
@@ -342,7 +346,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     .name
                     .as_ref()
                     .map(|v| v.to_string())
-                    .unwrap_or(format!("param{i}")))
+                    .unwrap_or(format!("param{}", i + 1)))
                 .collect::<Vec<_>>()
                 .join(", "),
         ));
@@ -364,16 +368,16 @@ impl<'writer> DefinitionWriter<'writer> {
             result.push(match (param.name.as_deref(), doc) {
                 (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
                 (Some(name), None)      => format!("--- @param {name} {ty}"),
-                (None, Some(doc))       => format!("--- @param param{i} {ty} {doc}"),
-                (None, None)            => format!("--- @param param{i} {ty}"),
+                (None, Some(doc))       => format!("--- @param param{} {ty} {doc}", i + 1),
+                (None, None)            => format!("--- @param param{} {ty}", i + 1),
             });
         }
 
-        for ret in returns.iter() {
+        for (i, ret) in returns.iter().enumerate() {
             let ty = self.type_signature(&ret.ty)?;
             let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match doc {
-                Some(doc) => format!("--- @return {ty} {doc}"),
+                Some(doc) => format!("--- @return {ty} #{}: {doc}", i + 1),
                 None      => format!("--- @return {ty}"),
             });
         }
@@ -398,7 +402,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     .name
                     .as_ref()
                     .map(|v| v.to_string())
-                    .unwrap_or(format!("param{i}")))
+                    .unwrap_or(format!("param{}", i + 1)))
                 .collect::<Vec<_>>()
                 .join(", "),
         ));
@@ -445,7 +449,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     .map(|(i, v)| {
                         let name = v.name.as_ref()
                             .map(|n| n.to_string())
-                            .unwrap_or(format!("param{i}"));
+                            .unwrap_or(format!("param{}", i + 1));
                         Ok(format!("{name}: {}", self.type_signature(&v.ty)?))
                     })
                     .collect::<mlua::Result<Vec<_>>>()?

@@ -134,7 +134,7 @@ enum SystemColor {
     White,
 }
 
-#[derive(Debug, Clone, Copy, Typed, UserData, Deserialize)]
+#[derive(Debug, Clone, Copy, Typed, Deserialize)]
 #[serde(untagged)]
 enum Color {
     System(SystemColor),
@@ -211,18 +211,43 @@ Produces the following definition file
 --- init.d.lua
 --- @meta
 
---- @alias System "Black"
----  | "Red"
----  | "Green"
----  | "Yellow"
----  | "Blue"
----  | "Cyan"
----  | "Magenta"
----  | "White"
+--- @alias System SystemBlack
+--- | SystemRed
+--- | SystemGreen
+--- | SystemYellow
+--- | SystemBlue
+--- | SystemCyan
+--- | SystemMagenta
+--- | SystemWhite
 
---- @alias Color SystemColor
----  | integer
----  | [integer, integer, integer]
+--- @class _System
+
+--- @class SystemBlack: _System
+--- @class SystemRed: _System
+--- @class SystemGreen: _System
+--- @class SystemYellow: _System
+--- @class SystemBlue: _System
+--- @class SystemCyan: _System
+--- @class SystemMagenta: _System
+--- @class SystemWhite: _System
+
+    System(SystemColor),
+    Xterm(u8),
+    Rgb(u8, u8, u8),
+--- @alias Color ColorSystem | ColorXterm | ColorRgb
+
+--- @class _Color
+
+--- @class ColorSystem: _Color
+--- @field [1] SystemColor
+
+--- @class ColorXterm: _Color
+--- @field [1] integer
+
+--- @class ColorRgb: _Color
+--- @field [1] integer
+--- @field [2] integer
+--- @field [3] integer
 
 --- This is a doc comment section for the overall type
 --- @class Example
