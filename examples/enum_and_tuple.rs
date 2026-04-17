@@ -1,15 +1,18 @@
-use std::path::PathBuf;
+use mlua::MetaMethod;
 use mlua_extras::{
-    Typed, UserData, mlua, typed::{
-        Param, Type, Typed, TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedUserData, generator::{Definition, DefinitionFileGenerator, Definitions}
-    }
+    Typed, UserData, mlua,
+    typed::{
+        Type, TypedDataFields, TypedDataMethods, TypedUserData,
+        generator::{Definition, DefinitionFileGenerator, Definitions},
+    },
 };
+use std::path::PathBuf;
 
 #[derive(Typed, UserData)]
 enum Kind {
     A(String),
     B { name: String, data: String },
-    C
+    C,
 }
 
 impl Kind {
@@ -17,7 +20,7 @@ impl Kind {
         match self {
             Self::A(data) => data.clone(),
             Self::B { data, .. } => data.clone(),
-            Self::C => "".to_string()
+            Self::C => "".to_string(),
         }
     }
 }
@@ -42,35 +45,39 @@ impl TypedUserData for Kind {
         });
 
         fields
-            .coerce(Type::literal("A") | "B" | "C")
-            .add_field_function_get("__variant", |_lua, this| {
+            .coerce(Type::named("KindEnum"))
+            .add_field_function_get("_variant", |_lua, this| {
                 match *this.borrow::<Self>().unwrap() {
                     Self::A(_) => Ok("A"),
                     Self::B { .. } => Ok("B"),
-                    Self::C => Ok("C")
+                    Self::C => Ok("C"),
                 }
             });
     }
 
     fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
-        methods.add_index_meta_method::<(String,), _, _, _>(|_lua, this: &Self, key: usize| {
-            match key {
-                1 => match this {
-                    // Multiple variants with a tuple field of the same index would convert the value into a lua value first and return it
-                    // This means that in the types it would be something like `[1] string|number` if there were multiple matches of different types
-                    Self::A(value) => Ok(value.clone()),
+        methods
+            // This can be called independantly but is chained with add_meta_method(MetaMethod::Index)
+            // to make maintenance easier. This should account for what is available with `__newindex`
+            // declerations as well.
+            .index::<String>(1, "Kind::A variant data")
+            .add_meta_method(MetaMethod::Index, |_lua, this: &Self, key: usize| {
+                match key {
+                    1 => match this {
+                        // Multiple variants with a tuple field of the same index would convert the value into a lua value first and return it
+                        // This means that in the types it would be something like `[1] string|number` if there were multiple matches of different types
+                        Self::A(value) => Ok(value.clone()),
+                        _ => Err(mlua::Error::runtime(format!(
+                            "Kind does not contain index '{key}' in it's current variant"
+                        ))),
+                    },
                     _ => Err(mlua::Error::runtime(format!(
                         "Kind does not contain index '{key}' in it's current variant"
                     ))),
-                },
-                _ => Err(mlua::Error::runtime(format!(
-                    "Kind does not contain index '{key}' in it's current variant"
-                ))),
-            }
-        });
+                }
+            });
 
-        methods
-            .add_method("getData", |_lua, this: &Self, _: ()| Ok(this.get_data()))
+        methods.add_method("getData", |_lua, this: &Self, _: ()| Ok(this.get_data()))
     }
 }
 
@@ -113,7 +120,7 @@ fn main() -> mlua::Result<()> {
     }
 
     let definitions: Definitions = Definitions::start()
-        .define("tuple", Definition::start().register::<Kind>("Kind"))
+        .define("enum_and_tuple", Definition::start().register::<Kind>("Kind"))
         .finish();
 
     let types_path = PathBuf::from("examples/types");
@@ -121,8 +128,8 @@ fn main() -> mlua::Result<()> {
         std::fs::create_dir_all(&types_path).unwrap();
     }
 
-    let gen = DefinitionFileGenerator::new(definitions.clone());
-    for (name, writer) in gen.iter() {
+    let dfg = DefinitionFileGenerator::new(definitions.clone());
+    for (name, writer) in dfg.iter() {
         println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
         writer.write_file(types_path.join(name)).unwrap();
     }

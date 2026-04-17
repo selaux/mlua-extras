@@ -2,8 +2,13 @@
 
 --- @alias Kind KindA | KindB | KindC
 
+--- @alias KindEnum "A"
+---  | "B"
+---  | "C"
+
 --- @class _Kind
---- @field __variant "A" | "B" | "C"
+--- @field _variant KindEnum
+--- Kind::A variant data
 --- @field [1] string
 --- @field data string
 --- @field name string
@@ -13,9 +18,9 @@ local _CLASS__Kind_ = {
   getData = function(self) end,
   __metatable = {
     --- @param self _Kind
-    --- @param param0 integer
+    --- @param param1 integer
     --- @return string
-    __index = function(self, param0) end,
+    __index = function(self, param1) end,
   }
 }
 

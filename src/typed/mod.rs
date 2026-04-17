@@ -662,7 +662,7 @@ pub trait TypedMultiValue {
 }
 
 macro_rules! impl_typed_multi_value {
-    () => (
+    () => {
         impl TypedMultiValue for () {
             #[allow(unused_mut)]
             #[allow(non_snake_case)]
@@ -670,8 +670,8 @@ macro_rules! impl_typed_multi_value {
                 Vec::new()
             }
         }
-    );
-    ($($name:ident) +) => (
+    };
+    ($($name:ident) +) => {
         impl<$($name,)* > TypedMultiValue for ($($name,)*)
             where $($name: Typed,)*
         {
@@ -683,7 +683,7 @@ macro_rules! impl_typed_multi_value {
                 ])
             }
         }
-    );
+    };
 }
 
 impl<A> TypedMultiValue for A
@@ -695,6 +695,7 @@ where
     }
 }
 
+// TODO: Replace count argument with ${count($name)} when meta-variables are stable
 impl_typed_multi_value!(A B C D E F G H I J K L M N O P);
 impl_typed_multi_value!(A B C D E F G H I J K L M N O);
 impl_typed_multi_value!(A B C D E F G H I J K L M N);

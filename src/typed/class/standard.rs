@@ -3,8 +3,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 
 use crate::{
-    typed::{Field, Func, Index, IntoDocComment, Type},
-    MaybeSend,
+    MaybeSend, typed::{Field, Func, Index, IntoDocComment, Type}
 };
 
 use super::{
@@ -42,11 +41,11 @@ impl From<TypedClassBuilder> for Type {
 
 impl TypedClassBuilder {
     pub fn new<T: TypedUserData>() -> Self {
-        let mut gen = Self::default();
-        T::add_documentation(&mut gen);
-        T::add_fields(&mut gen);
-        T::add_methods(&mut gen);
-        gen
+        let mut tcb = Self::default();
+        T::add_documentation(&mut tcb);
+        T::add_fields(&mut tcb);
+        T::add_methods(&mut tcb);
+        tcb
     }
 
     /// Skip/Remove a field field from the class definition
@@ -525,6 +524,16 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         self
     }
 
+    fn index<I: Typed>(&mut self, idx: usize, doc: impl IntoDocComment) -> &mut Self {
+        self.fields.insert(idx.into(), Field { ty: I::ty(), doc: doc.into_doc_comment() });
+        self
+    }
+
+    fn index_as(&mut self, idx: usize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
+        self.fields.insert(idx.into(), Field { ty: ty.into(), doc: doc.into_doc_comment() });
+        self
+    }
+
     fn add_method<S, A, R, M>(&mut self, name: S, _: M)
     where
         S: Into<String>,
@@ -594,35 +603,6 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
                 self.queued_returns.drain(..).collect(),
             ),
         );
-    }
-
-    fn add_index_meta_method<I, A, R, M>(&mut self, _: M)
-    where
-        I: TypedMultiValue,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
-    {
-        let name: Cow<'static, str> = mlua::MetaMethod::Index.to_string().into();
-        self.meta_methods.insert(
-            name.into(),
-            Func::new::<A, R>(
-                self.queued_doc.take(),
-                self.queued_params.drain(..).collect(),
-                self.queued_returns.drain(..).collect(),
-            ),
-        );
-
-        for (i, ty) in I::get_types().into_iter().enumerate() { 
-            self.fields.insert(
-                Index::from(i + 1),
-                // TODO: Update accessability to Field
-                Field {
-                    ty,
-                    doc: None,
-                }
-            );
-        }
     }
 
     #[cfg(feature = "async")]
@@ -735,35 +715,6 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
                 self.queued_returns.drain(..).collect(),
             ),
         );
-    }
-
-    fn add_newindex_meta_method<I, A, R, M>(&mut self, _: M)
-    where
-        I: TypedMultiValue,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
-    {
-        let name: Cow<'static, str> = mlua::MetaMethod::NewIndex.to_string().into();
-        self.meta_methods.insert(
-            name.into(),
-            Func::new::<A, R>(
-                self.queued_doc.take(),
-                self.queued_params.drain(..).collect(),
-                self.queued_returns.drain(..).collect(),
-            ),
-        );
-
-        for (i, ty) in I::get_types().into_iter().enumerate() { 
-            self.fields.insert(
-                Index::from(i + 1),
-                // TODO: Update accessability to Field
-                Field {
-                    ty,
-                    doc: None,
-                }
-            );
-        }
     }
 
     fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<String>, _: F)

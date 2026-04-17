@@ -1,7 +1,7 @@
 [package]
 name = "mlua-extras"
 version = "11.6.1"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Zachary Boehm <Tired Fox>"]
 description = "Extra helpers and functionality built on top of mlua for embedded lua development"
@@ -40,7 +40,7 @@ mlua = { version = "0.11.6", optional = true, default-features = false }
 strum = { version = "0.27.2", features = ["derive"], default-features = false }
 
 [[example]]
-name = "tuple"
+name = "enum_and_tuple"
 required-features = ["mlua"]
 
 [[example]]

@@ -313,8 +313,8 @@ impl<'writer> DefinitionWriter<'writer> {
             result.push(match (param.name.as_deref(), doc) {
                 (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
                 (Some(name), None)      => format!("--- @param {name} {ty}"),
-                (None, Some(doc))       => format!("--- @param param{i} {ty} {doc}"),
-                (None, None)            => format!("--- @param param{i} {ty}"),
+                (None, Some(doc))       => format!("--- @param param{} {ty} {doc}", i + 1),
+                (None, None)            => format!("--- @param param{} {ty}", i + 1),
             });
         }
 
@@ -346,7 +346,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     .name
                     .as_ref()
                     .map(|v| v.to_string())
-                    .unwrap_or(format!("param{i}")))
+                    .unwrap_or(format!("param{}", i + 1)))
                 .collect::<Vec<_>>()
                 .join(", "),
         ));
@@ -368,8 +368,8 @@ impl<'writer> DefinitionWriter<'writer> {
             result.push(match (param.name.as_deref(), doc) {
                 (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
                 (Some(name), None)      => format!("--- @param {name} {ty}"),
-                (None, Some(doc))       => format!("--- @param param{i} {ty} {doc}"),
-                (None, None)            => format!("--- @param param{i} {ty}"),
+                (None, Some(doc))       => format!("--- @param param{} {ty} {doc}", i + 1),
+                (None, None)            => format!("--- @param param{} {ty}", i + 1),
             });
         }
 
@@ -402,7 +402,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     .name
                     .as_ref()
                     .map(|v| v.to_string())
-                    .unwrap_or(format!("param{i}")))
+                    .unwrap_or(format!("param{}", i + 1)))
                 .collect::<Vec<_>>()
                 .join(", "),
         ));
@@ -449,7 +449,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     .map(|(i, v)| {
                         let name = v.name.as_ref()
                             .map(|n| n.to_string())
-                            .unwrap_or(format!("param{i}"));
+                            .unwrap_or(format!("param{}", i + 1));
                         Ok(format!("{name}: {}", self.type_signature(&v.ty)?))
                     })
                     .collect::<mlua::Result<Vec<_>>>()?

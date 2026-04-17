@@ -9,9 +9,9 @@ use crate::typed::{
 
 /// Write definitions to a string buffer and return the output.
 fn generate(definitions: Definitions) -> String {
-    let gen = LuauDefinitionFileGenerator::new(definitions);
+    let ldfg = LuauDefinitionFileGenerator::new(definitions);
     let mut out = Vec::new();
-    for (_, writer) in gen.iter() {
+    for (_, writer) in ldfg.iter() {
         writer.write(&mut out).unwrap();
     }
     String::from_utf8(out).unwrap()
@@ -448,8 +448,8 @@ fn test_extension_default() {
     let definitions = Definitions::start()
         .define("init", Definition::start().register_as("X", Type::string()))
         .finish();
-    let gen = LuauDefinitionFileGenerator::new(definitions);
-    let names: Vec<String> = gen.iter().map(|(name, _)| name).collect();
+    let ldfg = LuauDefinitionFileGenerator::new(definitions);
+    let names: Vec<String> = ldfg.iter().map(|(name, _)| name).collect();
     assert_eq!(names, vec!["init.d.luau"]);
 }
 
@@ -458,8 +458,8 @@ fn test_extension_custom() {
     let definitions = Definitions::start()
         .define("init", Definition::start().register_as("X", Type::string()))
         .finish();
-    let gen = LuauDefinitionFileGenerator::new(definitions).ext(".luau");
-    let names: Vec<String> = gen.iter().map(|(name, _)| name).collect();
+    let ldfg = LuauDefinitionFileGenerator::new(definitions).ext(".luau");
+    let names: Vec<String> = ldfg.iter().map(|(name, _)| name).collect();
     assert_eq!(names, vec!["init.luau"]);
 }
 

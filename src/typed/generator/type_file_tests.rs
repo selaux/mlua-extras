@@ -8,9 +8,9 @@ use crate::typed::{
 
 /// Write definitions to a string buffer and return the output.
 fn generate(definitions: Definitions) -> String {
-    let gen = DefinitionFileGenerator::new(definitions);
+    let dfg = DefinitionFileGenerator::new(definitions);
     let mut out = Vec::new();
-    for (_, writer) in gen.iter() {
+    for (_, writer) in dfg.iter() {
         writer.write(&mut out).unwrap();
     }
     String::from_utf8(out).unwrap()
@@ -106,8 +106,8 @@ fn test_extension_default() {
     let definitions = Definitions::start()
         .define("init", Definition::start().function::<(), ()>("x", ()))
         .finish();
-    let gen = DefinitionFileGenerator::new(definitions);
-    let names: Vec<String> = gen.iter().map(|(name, _)| name).collect();
+    let dfg = DefinitionFileGenerator::new(definitions);
+    let names: Vec<String> = dfg.iter().map(|(name, _)| name).collect();
     assert_eq!(names, vec!["init.d.lua"]);
 }
 
@@ -116,8 +116,8 @@ fn test_extension_custom() {
     let definitions = Definitions::start()
         .define("init", Definition::start().function::<(), ()>("x", ()))
         .finish();
-    let gen = DefinitionFileGenerator::new(definitions).ext(".lua");
-    let names: Vec<String> = gen.iter().map(|(name, _)| name).collect();
+    let dfg = DefinitionFileGenerator::new(definitions).ext(".lua");
+    let names: Vec<String> = dfg.iter().map(|(name, _)| name).collect();
     assert_eq!(names, vec!["init.lua"]);
 }
 

@@ -143,6 +143,14 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         self
     }
 
+    fn index<I: Typed>(&mut self, _idx: usize, _doc: impl IntoDocComment) -> &mut Self {
+        self
+    }
+
+    fn index_as(&mut self, _idx: usize, _ty: impl Into<Type>, _doc: impl IntoDocComment) -> &mut Self {
+        self
+    }
+
     fn add_method<S, A, R, M>(&mut self, name: S, method: M)
     where
         S: Into<String>,
@@ -180,16 +188,6 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
     {
         self.0.add_meta_method(meta, method)
-    }
-    
-    fn add_index_meta_method<I, A, R, M>(&mut self, method: M)
-    where
-        I: TypedMultiValue,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
-    {
-        self.add_meta_method(mlua::MetaMethod::Index, method);
     }
 
     #[cfg(feature = "async")]
@@ -256,16 +254,6 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         self.0.add_meta_method_mut(meta, method)
     }
     
-    fn add_newindex_meta_method<I, A, R, M>(&mut self, method: M)
-    where
-        I: TypedMultiValue,
-        A: FromLuaMulti + TypedMultiValue,
-        R: IntoLuaMulti + TypedMultiValue,
-        M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
-    {
-        self.add_meta_method_mut(mlua::MetaMethod::NewIndex, method)
-    }
-
     fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<String>, function: F)
     where
         A: FromLuaMulti + TypedMultiValue,

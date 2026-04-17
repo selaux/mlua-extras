@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{proc_macro_error, abort};
 use syn::spanned::Spanned;
-use venial::{Fields, Item, parse_item};
+use venial::{Item, parse_item};
 
 #[proc_macro_error]
 #[proc_macro_derive(UserData)]
@@ -66,7 +66,8 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
             let label = name.to_string();
             let underscore_name = format!("_{name}");
 
-            let names = enum_type.variants.iter().map(|(variant, _)| format!("{label}{}", variant.name)).collect::<Vec<_>>();
+            let names = enum_type.variants.iter().map(|(variant, _)| variant.name.to_string()).collect::<Vec<_>>();
+            let named = enum_type.variants.iter().map(|(variant, _)| format!("{label}{}", variant.name)).collect::<Vec<_>>();
             let variants = enum_type.variants
                 .iter()
                 .map(|(variant, _punc)| {
@@ -83,17 +84,22 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
 
+            let enum_alt = format!("{label}Enum");
             // TODO: This should be a union alias
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
                         mlua_extras::typed::Type::r#union([
-                            #(mlua_extras::typed::Type::named(#names),)*
+                            #(mlua_extras::typed::Type::named(#named),)*
                         ])
                     }
 
                     fn implicit() -> impl IntoIterator<Item=(&'static str, mlua_extras::typed::Type)> {
                         [
+                            (
+                                #enum_alt,
+                                mlua_extras::typed::Type::r#enum(vec![#(mlua_extras::typed::Type::literal(#names),)*])
+                            ),
                             (
                                 #underscore_name,
                                 mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<Self>())
