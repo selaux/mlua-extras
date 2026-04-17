@@ -1,0 +1,1 @@
+local _color: Color = ({} :: any);

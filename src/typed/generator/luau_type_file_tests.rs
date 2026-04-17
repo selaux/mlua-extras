@@ -132,7 +132,7 @@ fn test_declare_value() {
     ));
     assert_eq!(
         out.trim(),
-        "-- A global
+        "--- A global
 declare myGlobal: string"
     );
 }
@@ -142,11 +142,14 @@ fn test_declare_function() {
     let out = generate(single(
         Definition::start()
             .param("name", "The name")
+            .ret("Formatted greeting")
             .function::<String, String>("greet", ()),
     ));
     assert_eq!(
         out.trim(),
-        "declare function greet(name: string): string"
+        "--- @param name string -- The name
+--- @return string -- #1 Formatted greeting
+declare function greet(name: string): string"
     );
 }
 
@@ -158,7 +161,7 @@ fn test_function_no_return() {
     ));
     assert_eq!(
         out.trim(),
-        "declare function log(param0: string): ()"
+        "declare function log(param1: string): ()"
     );
 }
 
@@ -170,7 +173,7 @@ fn test_function_multi_return() {
     ));
     assert_eq!(
         out.trim(),
-        "declare function parse(param0: string): (boolean, string)"
+        "declare function parse(param1: string): (boolean, string)"
     );
 }
 
@@ -189,7 +192,7 @@ fn test_class_with_fields() {
     assert_eq!(
         out.trim(),
         "declare class Player
-\t-- Player name
+\t--- Player name
 \tname: string
 \tscore: number
 end"
@@ -213,8 +216,8 @@ fn test_class_with_methods() {
         out.trim(),
         "declare class Counter
 \tvalue: number
-\tfunction add(self, param0: number): ()
-\t-- Get the current value
+\tfunction add(self, param1: number): ()
+\t--- Get the current value
 \tfunction getValue(self): number
 end"
     );
@@ -237,8 +240,10 @@ fn test_class_with_functions_separate_table() {
         "declare class Utils
 end
 
+declare function Utils_upper(param1: string): string
+
 declare Utils: {
-\tupper: (param0: string) -> string,
+\tupper: typeof(Utils_upper),
 }"
     );
 }
@@ -275,7 +280,7 @@ fn test_class_with_meta_field() {
     assert_eq!(
         out.trim(),
         "declare class Tracked
-\t-- Meta field
+\t--- Meta field
 \t__count: number
 end"
     );
@@ -397,9 +402,9 @@ fn test_doc_comments() {
     ));
     assert_eq!(
         out.trim(),
-        "-- Greet someone
--- This is multiline
-declare function greet(param0: string): ()"
+        "--- Greet someone
+--- This is multiline
+declare function greet(param1: string): ()"
     );
 }
 
@@ -413,8 +418,8 @@ fn test_class_doc_comment() {
     let out = generate(single(def_builder));
     assert_eq!(
         out.trim(),
-        "-- Top-level doc
--- A documented class
+        "--- Top-level doc
+--- A documented class
 declare class Documented
 end"
     );
@@ -730,7 +735,7 @@ fn test_mismatch_variadic_erases_to_any() {
     ));
     assert_eq!(
         out.trim(),
-        "declare function log(param0: string, param1: any): ()"
+        "declare function log(param1: string, param2: any): ()"
     );
 }
 
@@ -782,9 +787,11 @@ fn test_static_functions_separate_table() {
         "declare class Factory
 end
 
+--- A static factory method
+declare function Factory_create(param1: string): number
+
 declare Factory: {
-\t-- A static factory method
-\tcreate: (param0: string) -> number,
+\tcreate: typeof(Factory_create),
 }"
     );
 }
@@ -835,9 +842,9 @@ fn test_integer_maps_to_number() {
     assert_eq!(
         out.trim(),
         "declare class Stats
-\t-- An integer field
+\t--- An integer field
 \tcount: number
-\t-- A float field
+\t--- A float field
 \tratio: number
 end
 

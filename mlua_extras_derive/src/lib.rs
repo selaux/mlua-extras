@@ -51,19 +51,12 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                         mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>())
                     }
 
-                    fn as_param() -> mlua_extras::typed::Param {
-                        mlua_extras::typed::Param {
-                            doc: None,
-                            name: None,
-                            ty: mlua_extras::typed::Type::named(#label),
-                        }
+                    fn as_param() -> mlua_extras::typed::Type {
+                        mlua_extras::typed::Type::named(#label)
                     }
 
-                    fn as_return() -> mlua_extras::typed::Return {
-                        mlua_extras::typed::Return {
-                            doc: None,
-                            ty: mlua_extras::typed::Type::named(#label),
-                        }
+                    fn as_return() -> mlua_extras::typed::Type {
+                        mlua_extras::typed::Type::named(#label)
                     }
                 }
             )
@@ -115,19 +108,12 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                         ]
                     }
 
-                    fn as_param() -> mlua_extras::typed::Param {
-                        mlua_extras::typed::Param {
-                            doc: None,
-                            name: None,
-                            ty: mlua_extras::typed::Type::named(#label),
-                        }
+                    fn as_param() -> mlua_extras::typed::Type {
+                        mlua_extras::typed::Type::named(#label)
                     }
 
-                    fn as_return() -> mlua_extras::typed::Return {
-                        mlua_extras::typed::Return {
-                            doc: None,
-                            ty: mlua_extras::typed::Type::named(#label),
-                        }
+                    fn as_return() -> mlua_extras::typed::Type {
+                        mlua_extras::typed::Type::named(#label)
                     }
                 }
             )

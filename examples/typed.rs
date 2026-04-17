@@ -173,6 +173,7 @@ fn main() -> mlua::Result<()> {
                 .register::<Color>("Color")
                 .register::<Example>("Example")
                 .value::<Example>("example")
+                .document("Greet someone")
                 .param("name", "Name of the person to greet")
                 .function::<String, ()>("greet", ())
                 .param("color", "Color to print to stdout")
