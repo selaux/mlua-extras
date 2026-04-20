@@ -3,38 +3,29 @@ export type SystemColorEnum = "Black" | "Red" | "Green" | "Yellow" | "Blue" | "C
 declare class _SystemColor
 end
 
-
 declare class SystemColorBlack extends _SystemColor
 end
-
 
 declare class SystemColorRed extends _SystemColor
 end
 
-
 declare class SystemColorGreen extends _SystemColor
 end
-
 
 declare class SystemColorYellow extends _SystemColor
 end
 
-
 declare class SystemColorBlue extends _SystemColor
 end
-
 
 declare class SystemColorCyan extends _SystemColor
 end
 
-
 declare class SystemColorMagenta extends _SystemColor
 end
 
-
 declare class SystemColorWhite extends _SystemColor
 end
-
 
 export type System = SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
 
@@ -42,22 +33,17 @@ export type ColorEnum = "System" | "Xterm" | "Rgb"
 
 --- Representation of a color
 declare class _Color
-	--- @return string
 	function __tostring(self): string
 end
-
 
 declare class ColorSystem extends _Color
 end
 
-
 declare class ColorXterm extends _Color
 end
 
-
 declare class ColorRgb extends _Color
 end
-
 
 export type Color = ColorSystem | ColorXterm | ColorRgb
 
@@ -65,7 +51,6 @@ export type Color = ColorSystem | ColorXterm | ColorRgb
 declare class Example
 	--- Example complex type
 	color: Color
-	--- @return string
 	function __tostring(self): string
 end
 
@@ -74,7 +59,6 @@ end
 --- @param ... any -- Arguments to pass to the formatter.
 declare function Example_LogAny(format: string, ...: any): ()
 --- print all items
---- @param ... any
 declare function Example_printAll(...: any): ()
 
 declare Example: {

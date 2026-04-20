@@ -255,7 +255,7 @@ impl<'writer> DefinitionWriter<'writer> {
                             .iter()
                             .map(|v| self.type_signature(v))
                             .collect::<mlua::Result<Vec<_>>>()?
-                            .join("\n---  | ")
+                            .join("\n---| ")
                     )?;
                 }
                 Type::Alias(ty) => {
