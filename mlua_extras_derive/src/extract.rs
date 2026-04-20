@@ -1,6 +1,6 @@
 use darling::FromMeta;
 use deluxe::{ParseAttributes, ParseMetaItem};
-use proc_macro2::TokenStream;
+use proc_macro2::{Literal, TokenStream};
 use quote::ToTokens;
 use syn::{
     spanned::Spanned, Attribute, Expr, ExprLit, FnArg, ImplItemFn, Lit, Meta, MetaNameValue, Pat,
@@ -72,6 +72,32 @@ pub struct UserDataField {
     #[darling(default)]
     pub rename: Option<Index>,
 }
+
+#[derive(Debug, darling::FromField)]
+#[darling(attributes(field), forward_attrs(doc))]
+pub struct UserDataEnumField {
+    pub ident: Option<syn::Ident>,
+    pub ty: syn::Type,
+    
+    #[darling(default, skip)]
+    pub variant: TokenStream,
+    #[darling(default, skip)]
+    pub accessor: TokenStream,
+
+    #[allow(dead_code)]
+    #[darling(with = "docs")]
+    pub attrs: Option<String>,
+
+    #[darling(default)]
+    pub skip: bool,
+    #[darling(default)]
+    pub readonly: bool,
+    #[darling(default)]
+    pub writeonly: bool,
+    #[darling(default)]
+    pub rename: Option<Index>,
+}
+
 
 #[derive(Debug)]
 pub enum PassBy {
@@ -347,10 +373,18 @@ impl ToTokens for IdentOrCustom {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Index {
     Int(isize),
     Str(String),
+}
+impl Index {
+    pub fn is_str(&self) -> bool {
+        match self {
+            Self::Str(_) => true,
+            _ => false,
+        }
+    }
 }
 impl std::fmt::Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -380,7 +414,7 @@ impl FromMeta for Index {
 impl ToTokens for Index {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
-            Self::Int(i) => i.to_tokens(tokens),
+            Self::Int(i) => Literal::isize_unsuffixed(*i).to_tokens(tokens),
             Self::Str(s) => s.to_tokens(tokens),
         }
     }
