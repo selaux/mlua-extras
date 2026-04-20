@@ -45,7 +45,7 @@ impl TypedUserData for Kind {
         });
 
         fields
-            .coerce(Type::named("KindEnum"))
+            .coerce(Type::named("KindVariant"))
             .add_field_function_get("_variant", |_lua, this| {
                 match *this.borrow::<Self>().unwrap() {
                     Self::A(_) => Ok("A"),

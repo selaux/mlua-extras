@@ -7,38 +7,26 @@ use proc_macro_error::{proc_macro_error, abort};
 use syn::spanned::Spanned;
 use venial::{Item, parse_item};
 
+mod methods;
+mod userdata;
+pub(crate) mod extract;
+
 #[proc_macro_error]
-#[proc_macro_derive(UserData)]
+#[proc_macro_derive(UserData, attributes(field))]
 pub fn derive_user_data(input: TokenStream) -> TokenStream {
-    let input = TokenStream2::from(input);
-    let name = match parse_item(input.clone()) {
-        Ok(Item::Struct(struct_type)) => {
-            struct_type.name.clone()
-        },
-        Ok(Item::Enum(enum_type)) => {
-            enum_type.name.clone()
-        },
-        Err(err) => abort!(err.span(), "{}", err),
-        _ => abort!(input.span(), "only `struct` and `enum` types are supported for TypedUserData")
-    };
-
-    quote!(
-        impl mlua_extras::mlua::UserData for #name {
-            fn add_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
-                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(fields);
-                <#name as mlua_extras::typed::TypedUserData>::add_fields(&mut wrapper);
-            }
-
-            fn add_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
-                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(methods);
-                <#name as mlua_extras::typed::TypedUserData>::add_methods(&mut wrapper);
-            }
-        }
-    ).into()
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    userdata::derive(input).into()
 }
 
 #[proc_macro_error]
-#[proc_macro_derive(Typed, attributes(typed))]
+#[proc_macro_attribute]
+pub fn user_data_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item = syn::parse_macro_input!(item as syn::ItemImpl);
+    methods::derive(item).into()
+}
+
+#[proc_macro_error]
+#[proc_macro_derive(Typed)]
 pub fn derive_typed(input: TokenStream) -> TokenStream {
     let input = TokenStream2::from(input);
     match parse_item(input.clone()) {
@@ -84,7 +72,7 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
 
-            let enum_alt = format!("{label}Enum");
+            let enum_alt = format!("{label}Variant");
             // TODO: This should be a union alias
             quote!(
                 impl mlua_extras::typed::Typed for #name {

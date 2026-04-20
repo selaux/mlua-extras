@@ -40,6 +40,10 @@ mlua = { version = "0.11.6", optional = true, default-features = false }
 strum = { version = "0.27.2", features = ["derive"], default-features = false }
 
 [[example]]
+name = "macros"
+required-features = ["mlua", "derive"]
+
+[[example]]
 name = "enum_and_tuple"
 required-features = ["mlua"]
 

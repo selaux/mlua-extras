@@ -14,6 +14,8 @@ repository = "https://github.com/Tired-Fox/mlua-extras/tree/main/mlua_extras_der
 keywords = ["lua", "types", "mlua", "macros", "derive"]
 
 [dependencies]
+darling = "0.23.0"
+deluxe = "0.5.0"
 proc-macro-error = "1.0.4"
 proc-macro2 = "1.0.86"
 quote = "1.0.37"
