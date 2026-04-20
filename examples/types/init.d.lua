@@ -1,13 +1,13 @@
 --- @meta
 
 --- @alias SystemColorEnum "Black"
----  | "Red"
----  | "Green"
----  | "Yellow"
----  | "Blue"
----  | "Cyan"
----  | "Magenta"
----  | "White"
+---| "Red"
+---| "Green"
+---| "Yellow"
+---| "Blue"
+---| "Cyan"
+---| "Magenta"
+---| "White"
 
 --- @class _SystemColor
 
@@ -30,8 +30,8 @@
 --- @alias System SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
 
 --- @alias ColorEnum "System"
----  | "Xterm"
----  | "Rgb"
+---| "Xterm"
+---| "Rgb"
 
 --- Representation of a color
 --- @class _Color

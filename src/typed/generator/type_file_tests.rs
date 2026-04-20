@@ -154,9 +154,9 @@ fn test_enum_multiple_variants() {
         r#"--- @meta
 
 --- @alias Direction "Up"
----  | "Down"
----  | "Left"
----  | "Right""#
+---| "Down"
+---| "Left"
+---| "Right""#
     );
 }
 
@@ -175,7 +175,7 @@ fn test_enum_with_doc() {
 
 --- The available colors
 --- @alias Color "Red"
----  | "Blue""#
+---| "Blue""#
     );
 }
 
@@ -798,7 +798,7 @@ fn test_type_sig_enum_cross_reference() {
         r#"--- @meta
 
 --- @alias Color "Red"
----  | "Green"
+---| "Green"
 
 --- @class Widget
 --- @field color Color"#
@@ -853,8 +853,8 @@ fn test_enum_referenced_in_value() {
         r#"--- @meta
 
 --- @alias Color "Red"
----  | "Green"
----  | "Blue"
+---| "Green"
+---| "Blue"
 
 --- @type Color
 defaultColor = nil"#
