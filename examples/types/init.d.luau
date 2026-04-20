@@ -1,68 +1,92 @@
-export type System = SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
-
 export type SystemColorEnum = "Black" | "Red" | "Green" | "Yellow" | "Blue" | "Cyan" | "Magenta" | "White"
 
 declare class _SystemColor
 end
 
-declare class SystemColorBlack
+
+declare class SystemColorBlack extends _SystemColor
 end
 
-declare class SystemColorRed
+
+declare class SystemColorRed extends _SystemColor
 end
 
-declare class SystemColorGreen
+
+declare class SystemColorGreen extends _SystemColor
 end
 
-declare class SystemColorYellow
+
+declare class SystemColorYellow extends _SystemColor
 end
 
-declare class SystemColorBlue
+
+declare class SystemColorBlue extends _SystemColor
 end
 
-declare class SystemColorCyan
+
+declare class SystemColorCyan extends _SystemColor
 end
 
-declare class SystemColorMagenta
+
+declare class SystemColorMagenta extends _SystemColor
 end
 
-declare class SystemColorWhite
+
+declare class SystemColorWhite extends _SystemColor
 end
 
-export type Color = ColorSystem | ColorXterm | ColorRgb
+
+export type System = SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
 
 export type ColorEnum = "System" | "Xterm" | "Rgb"
 
--- Representation of a color
+--- Representation of a color
 declare class _Color
+	--- @return string
 	function __tostring(self): string
 end
 
-declare class ColorSystem
+
+declare class ColorSystem extends _Color
 end
 
-declare class ColorXterm
+
+declare class ColorXterm extends _Color
 end
 
-declare class ColorRgb
+
+declare class ColorRgb extends _Color
 end
 
--- This is a doc comment section for the overall type
+
+export type Color = ColorSystem | ColorXterm | ColorRgb
+
+--- This is a doc comment section for the overall type
 declare class Example
-	-- Example complex type
+	--- Example complex type
 	color: Color
+	--- @return string
 	function __tostring(self): string
 end
+
+--- Log a specific format with any lua types
+--- @param format string -- String to pass to the formatter.
+--- @param ... any -- Arguments to pass to the formatter.
+declare function Example_LogAny(format: string, ...: any): ()
+--- print all items
+--- @param ... any
+declare function Example_printAll(...: any): ()
 
 declare Example: {
-	-- Log a specific format with any lua types
-	LogAny: (format: string, ...: any) -> (),
-	-- print all items
-	printAll: (...: any) -> (),
+	LogAny: typeof(Example_LogAny),
+	printAll: typeof(Example_printAll),
 }
 
 declare example: Example
 
+--- Greet someone
+--- @param name string -- Name of the person to greet
 declare function greet(name: string): ()
 
+--- @param color Color -- Color to print to stdout
 declare function printColor(color: Color): ()

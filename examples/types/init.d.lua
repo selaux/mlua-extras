@@ -1,7 +1,5 @@
 --- @meta
 
---- @alias System SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
-
 --- @alias SystemColorEnum "Black"
 ---  | "Red"
 ---  | "Green"
@@ -29,7 +27,7 @@
 
 --- @class SystemColorWhite: _SystemColor
 
---- @alias Color ColorSystem | ColorXterm | ColorRgb
+--- @alias System SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
 
 --- @alias ColorEnum "System"
 ---  | "Xterm"
@@ -50,6 +48,8 @@ local _CLASS__Color_ = {
 --- @class ColorXterm: _Color
 
 --- @class ColorRgb: _Color
+
+--- @alias Color ColorSystem | ColorXterm | ColorRgb
 
 --- This is a doc comment section for the overall type
 --- @class Example
@@ -73,6 +73,7 @@ local _CLASS_Example_ = {
 --- @type Example
 example = nil
 
+--- Greet someone
 --- @param name string Name of the person to greet
 function greet(name) end
 

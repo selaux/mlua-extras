@@ -156,14 +156,6 @@ impl DefinitionBuilder {
 
     /// Register a type
     pub fn register<T: Typed>(mut self, name: impl Into<Cow<'static, str>>) -> Self {
-        let ty = T::ty();
-        let ty = match &ty {
-            Type::Class(_) | Type::Enum(_) => ty,
-            _ => Type::alias(ty),
-        };
-
-        self.entries.push(Entry::new(name.into(), ty.into()));
-
         for (name, ty) in T::implicit().into_iter() {
             let ty = match ty {
                 Type::Class(_) | Type::Enum(_) => ty,
@@ -172,6 +164,13 @@ impl DefinitionBuilder {
             self.entries.push(Entry::new(name, ty));
         }
 
+        let ty = T::ty();
+        let ty = match &ty {
+            Type::Class(_) | Type::Enum(_) => ty,
+            _ => Type::alias(ty),
+        };
+
+        self.entries.push(Entry::new(name.into(), ty.into()));
         self
     }
 

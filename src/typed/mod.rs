@@ -32,20 +32,13 @@ pub trait Typed {
     }
 
     /// Get the type as a function parameter
-    fn as_param() -> Param {
-        Param {
-            doc: None,
-            name: None,
-            ty: Self::ty(),
-        }
+    fn as_param() -> Type {
+        Self::ty()
     }
 
     /// Get the type as a function return
-    fn as_return() -> Return {
-        Return {
-            doc: None,
-            ty: Self::ty(),
-        }
+    fn as_return() -> Type {
+        Self::ty()
     }
 }
 
@@ -676,7 +669,11 @@ macro_rules! impl_typed_multi_value {
             #[allow(non_snake_case)]
             fn get_types_as_params() -> Vec<Param> {
                 Vec::from([
-                    $($name::as_param(),)*
+                    $(Param {
+                        doc: None,
+                        name: None,
+                        ty: $name::as_param(),
+                    },)*
                 ])
             }
 
@@ -684,7 +681,10 @@ macro_rules! impl_typed_multi_value {
             #[allow(non_snake_case)]
             fn get_types_as_returns() -> Vec<Return> {
                 Vec::from([
-                    $($name::as_return(),)*
+                    $(Return {
+                        doc: None,
+                        ty: $name::as_return(),
+                    },)*
                 ])
             }
         }
@@ -696,11 +696,11 @@ where
     A: Typed,
 {
     fn get_types_as_params() -> Vec<Param> {
-        Vec::from([A::as_param()])
+        Vec::from([Param { name: None, doc: None, ty: A::as_param()}])
     }
 
     fn get_types_as_returns() -> Vec<Return> {
-        Vec::from([A::as_return()])
+        Vec::from([Return { doc: None, ty: A::as_return() }])
     }
 }
 

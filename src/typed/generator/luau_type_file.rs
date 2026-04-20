@@ -122,7 +122,11 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         &[definition.doc.as_deref(), type_data.type_doc.as_deref()],
                         "",
                     )?;
-                    writeln!(buffer, "declare class {}", definition.name)?;
+                    write!(buffer, "declare class {}", definition.name)?;
+                    if !type_data.derives.is_empty() {
+                        write!(buffer, " extends {}", type_data.derives.join(", "))?;
+                    }
+                    writeln!(buffer)?;
 
                     // Static fields
                     for (name, field) in type_data.static_fields.iter() {
@@ -178,6 +182,16 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                             &[func.doc.as_deref()],
                             "\t",
                         )?;
+                        self.write_param_doc_comments(
+                            &mut buffer,
+                            &func.params,
+                            "\t"
+                        )?;
+                        self.write_return_doc_comments(
+                            &mut buffer,
+                            &func.returns,
+                            "\t"
+                        )?;
                         writeln!(
                             buffer,
                             "\tfunction {}(self{}{}): {}",
@@ -193,24 +207,50 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     // Static functions and meta_functions are emitted as a
                     // separate global table declaration, since `declare class`
                     // requires `self` on every function.
+                    //
+                    // They are first declared themselves to give them richer type information.
+                    // Then they are added to a global table declaration with `typeof()`.
                     let static_fns: Vec<_> = type_data.functions.iter()
                         .chain(type_data.meta_functions.iter())
                         .collect();
+
+                    if !static_fns.is_empty() {
+                        writeln!(buffer)?;
+                    }
+
+                    for (name, func) in static_fns.iter() {
+                        self.write_doc_comments(
+                            &mut buffer,
+                            &[func.doc.as_deref()],
+                            "",
+                        )?;
+                        self.write_param_doc_comments(
+                            &mut buffer,
+                            &func.params,
+                            ""
+                        )?;
+                        self.write_return_doc_comments(
+                            &mut buffer,
+                            &func.returns,
+                            ""
+                        )?;
+                        writeln!(
+                            buffer,
+                            "declare function {}_{name}({}): {}",
+                            definition.name,
+                            self.param_list(&func.params)?,
+                            self.return_type(&func.returns)?,
+                        )?;
+                    }
+
                     if !static_fns.is_empty() {
                         writeln!(buffer)?;
                         writeln!(buffer, "declare {}: {{", definition.name)?;
-                        for (name, func) in &static_fns {
-                            self.write_doc_comments(
-                                &mut buffer,
-                                &[func.doc.as_deref()],
-                                "\t",
-                            )?;
+                        for (name, _func) in &static_fns {
                             writeln!(
                                 buffer,
-                                "\t{}: ({}) -> {},",
-                                name,
-                                self.param_list(&func.params)?,
-                                self.return_type(&func.returns)?,
+                                "\t{name}: typeof({}_{name}),",
+                                definition.name,
                             )?;
                         }
                         writeln!(buffer, "}}")?;
@@ -255,6 +295,16 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         &mut buffer,
                         &[definition.doc.as_deref()],
                         "",
+                    )?;
+                    self.write_param_doc_comments(
+                        &mut buffer,
+                        &params,
+                        ""
+                    )?;
+                    self.write_return_doc_comments(
+                        &mut buffer,
+                        &returns,
+                        ""
                     )?;
                     writeln!(
                         buffer,
@@ -387,7 +437,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     .name
                     .as_deref()
                     .map(|n| n.to_string())
-                    .unwrap_or_else(|| format!("param{i}"));
+                    .unwrap_or_else(|| format!("param{}", i + 1));
                 Ok(format!("{}: {}", name, self.type_signature(&p.ty)?))
             })
             .collect::<mlua::Result<Vec<_>>>()
@@ -417,8 +467,45 @@ impl<'writer> LuauDefinitionWriter<'writer> {
     ) -> mlua::Result<()> {
         for doc in docs.iter().filter_map(|v| *v) {
             for line in doc.split('\n') {
-                writeln!(buffer, "{indent}-- {line}")?;
+                writeln!(buffer, "{indent}--- {line}")?;
             }
+        }
+        Ok(())
+    }
+
+    fn write_param_doc_comments<W: std::io::Write>(
+        &self,
+        buffer: &mut W,
+        params: &[Param],
+        indent: &str,
+    ) -> mlua::Result<()> {
+        for (i, p) in params.iter().enumerate().filter(|(_, p)| p.doc.is_some()) {
+            write!(buffer, "{indent}--- @param {} {}",
+                p.name.as_deref().map(|v| v.to_string()).unwrap_or_else(|| format!("param{}", i + 1)),
+                self.type_signature(&p.ty)?
+            )?;
+            if let Some(doc) = p.doc.as_deref() {
+                let doc = doc.replace('\n', "");
+                write!(buffer, " -- {doc}")?;
+            }
+            writeln!(buffer)?;
+        }
+        Ok(())
+    }
+
+    fn write_return_doc_comments<W: std::io::Write>(
+        &self,
+        buffer: &mut W,
+        returns: &[Return],
+        indent: &str,
+    ) -> mlua::Result<()> {
+        for (i, r) in returns.iter().enumerate().filter(|(_, r)| r.doc.is_some()) {
+            write!(buffer, "{indent}--- @return {}", self.type_signature(&r.ty)?)?;
+            if let Some(doc) = r.doc.as_deref() {
+                let doc = doc.replace('\n', "");
+                write!(buffer, " -- #{} {doc}", i + 1)?;
+            }
+            writeln!(buffer)?;
         }
         Ok(())
     }
