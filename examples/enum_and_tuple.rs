@@ -1,17 +1,21 @@
-use mlua::MetaMethod;
+use mlua::{MetaMethod, UserData};
 use mlua_extras::{
-    Typed, UserData, mlua,
+    Typed, mlua,
     typed::{
-        Type, TypedDataFields, TypedDataMethods, TypedUserData,
+        Type, TypedDataFields, TypedDataMethods, TypedUserData, WrappedBuilder,
         generator::{Definition, DefinitionFileGenerator, Definitions},
     },
 };
 use std::path::PathBuf;
 
-#[derive(Typed, UserData)]
+#[derive(Typed)]
 enum Kind {
     A(String),
-    B { name: String, data: String },
+    B {
+        name: String,
+        data: String,
+    },
+    #[allow(unused)]
     C,
 }
 
@@ -22,6 +26,18 @@ impl Kind {
             Self::B { data, .. } => data.clone(),
             Self::C => "".to_string(),
         }
+    }
+}
+
+impl UserData for Kind {
+    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
+        let mut wrapper = WrappedBuilder::new(fields);
+        <Self as TypedUserData>::add_fields(&mut wrapper);
+    }
+
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
+        let mut wrapper = mlua_extras::typed::WrappedBuilder::new(methods);
+        <Self as TypedUserData>::add_methods(&mut wrapper);
     }
 }
 
@@ -97,7 +113,7 @@ fn main() -> mlua::Result<()> {
         .load(
             r#"
         print(KindA[1])
-        print(KindA["1"])
+        -- print(KindA["1"])
         print(KindB.name)
         print(KindB.data)
 
@@ -120,7 +136,12 @@ fn main() -> mlua::Result<()> {
     }
 
     let definitions: Definitions = Definitions::start()
-        .define("enum_and_tuple", Definition::start().register::<Kind>("Kind"))
+        .define(
+            "enum_and_tuple",
+            Definition::start()
+                .register::<Kind>("Kind")
+                .register_as("KindVariant", Type::literal("A") | "B" | "C"),
+        )
         .finish();
 
     let types_path = PathBuf::from("examples/types");

@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use syn::{ImplItem, ItemImpl, Type};
 use quote::quote;
 
-use crate::extract::{PassBy, UserDataMethod};
+use crate::extract::{PassBy, UserDataMethod, is_metamethod_attr, is_method_attr};
 
 pub fn derive(item: ItemImpl) -> TokenStream {
     let self_ty = &item.self_ty;
@@ -51,14 +51,6 @@ pub fn derive(item: ItemImpl) -> TokenStream {
             }
         }
     }
-}
-
-fn is_method_attr(attr: &syn::Attribute) -> bool {
-    attr.path().is_ident("method")
-}
-
-fn is_metamethod_attr(attr: &syn::Attribute) -> bool {
-    attr.path().is_ident("metamethod")
 }
 
 fn generate_registration(info: &UserDataMethod, self_ty: &Type) -> TokenStream {

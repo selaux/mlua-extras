@@ -84,7 +84,8 @@ pub fn derive_user_data(input: TokenStream) -> TokenStream {
 /// - `&mut self`: registered with `mlua::UserDataMethods::add_method_mut` or `mlua::UserDataMethods::add_meta_method_mut`
 /// - without `self`: registered with `mlua::UserDataMethods::add_function` or `mlua::UserDataMethods::add_meta_function`
 /// - `async fn`: registered with the `mlua::UserDataMethods::add_async_*` variant that matches the above arguments
-/// - If the first non `self` parameter is `lua` then `&mlua::Lua` is passed to that parameter from the Lua context
+/// - If the first non `self` parameter is `lua` then `&mlua::Lua` is passed to non async methods/functions
+///     and `mlua::Lua` is passed into async methods/functions
 /// 
 /// # Return
 /// 

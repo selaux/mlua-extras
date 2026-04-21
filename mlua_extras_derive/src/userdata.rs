@@ -206,7 +206,10 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
                         }).to_string(), Span::call_site()));
                         let ty = &f.ty;
 
-                        Some(quote!(Some(#lua_idx) => this.#idx = <#ty as mlua_extras::mlua::FromLua>::from_lua(_value.clone(), _lua)?,))
+                        Some(quote!(Some(#lua_idx) => {
+                            this.#idx = <#ty as mlua_extras::mlua::FromLua>::from_lua(_value.clone(), _lua)?;
+                            return Ok(None)
+                        },))
                     },
                 }
             }).collect::<Vec<_>>();
@@ -226,7 +229,11 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
                     return usr.call::<mlua_extras::mlua::Value>((this.clone(), _idx.clone()));
                 }
 
-                Ok(mlua_extras::mlua::Value::Nil)
+                Err(mlua_extras::mlua::Error::runtime(match _idx {
+                    mlua_extras::mlua::Value::Integer(i) => format!("type does not contain index '{i}'"),
+                    mlua_extras::mlua::Value::String(s) => format!("type does not contain field '{}'", s.to_string_lossy()),
+                    _ => "type does not contain index".into()
+                }))
             });
 
             methods.add_meta_function(mlua_extras::mlua::MetaMethod::NewIndex, |_lua, (this, _idx, _value): (mlua_extras::mlua::AnyUserData, mlua_extras::mlua::Value, mlua_extras::mlua::Value)| {
@@ -416,7 +423,10 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
                         let accessor = &f.accessor;
                         let ty = &f.ty;
                         quote!{
-                            Self::#variant => *#accessor = <#ty as mlua_extras::mlua::FromLua>::from_lua(_value.clone(), _lua)?,
+                            Self::#variant => {
+                                *#accessor = <#ty as mlua_extras::mlua::FromLua>::from_lua(_value.clone(), _lua)?;
+                                return Ok(None);
+                            },
                         }
                     })
                     .collect();
@@ -454,7 +464,11 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
                     return usr.call::<mlua_extras::mlua::Value>((this.clone(), _idx.clone()));
                 }
                 
-                Ok(mlua_extras::mlua::Value::Nil)
+                Err(mlua_extras::mlua::Error::runtime(match _idx {
+                    mlua_extras::mlua::Value::Integer(i) => format!("type variant does not contain index '{i}'"),
+                    mlua_extras::mlua::Value::String(s) => format!("type variant does not contain field '{}'", s.to_string_lossy()),
+                    _ => "type variant does not contain index".into()
+                }))
             });
 
             methods.add_meta_function(mlua_extras::mlua::MetaMethod::NewIndex, |_lua, (this, _idx, _value): (mlua_extras::mlua::AnyUserData, mlua_extras::mlua::Value, mlua_extras::mlua::Value)| {

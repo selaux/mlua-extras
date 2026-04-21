@@ -1,13 +1,7 @@
 --- @meta
 
---- @alias Kind KindA | KindB | KindC
-
---- @alias KindEnum "A"
----  | "B"
----  | "C"
-
 --- @class _Kind
---- @field _variant KindEnum
+--- @field _variant KindVariant
 --- Kind::A variant data
 --- @field [1] string
 --- @field data string
@@ -29,4 +23,8 @@ local _CLASS__Kind_ = {
 --- @class KindB: _Kind
 
 --- @class KindC: _Kind
+
+--- @alias Kind KindA | KindB | KindC
+
+--- @alias KindVariant "A" | "B" | "C"
 
