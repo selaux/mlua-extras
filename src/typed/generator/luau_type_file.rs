@@ -128,15 +128,15 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     }
                     writeln!(buffer)?;
 
-                    // Static fields
-                    for (name, field) in type_data.static_fields.iter() {
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[field.doc.as_deref()],
-                            "\t",
-                        )?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
-                    }
+                    // // Static fields
+                    // for (name, field) in type_data.static_fields.iter() {
+                    //     self.write_doc_comments(
+                    //         &mut buffer,
+                    //         &[field.inner.doc.as_deref()],
+                    //         "\t",
+                    //     )?;
+                    //     writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
+                    // }
 
                     // Instance fields
                     for (name, field) in type_data.fields.iter() {

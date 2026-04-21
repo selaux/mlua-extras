@@ -10,7 +10,7 @@ mod wrapped;
 mod standard;
 
 pub use wrapped::WrappedBuilder;
-pub use standard::TypedClassBuilder;
+pub use standard::{TypedClassBuilder, TypedClass};
 
 /// Typed variant of [`mlua::UserData`]
 pub trait TypedUserData: Sized {

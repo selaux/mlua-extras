@@ -4,7 +4,6 @@ use mlua::{
 };
 #[cfg(feature = "async")]
 use mlua::{UserDataRef, UserDataRefMut};
-
 use crate::{MaybeSend, typed::IntoDocComment};
 
 use super::{Type, Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};

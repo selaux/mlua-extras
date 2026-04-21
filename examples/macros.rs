@@ -1,12 +1,16 @@
-use mlua::{IntoLua, FromLua, Lua, StdLib};
-use mlua_extras::{UserData, Typed, user_data_impl};
+use std::path::PathBuf;
 
-#[derive(Clone, UserData)]
+use mlua::{IntoLua, FromLua, Lua, StdLib};
+use mlua_extras::{TypedUserData, typed::generator::{Definition, DefinitionFileGenerator, Definitions}, typed_user_data_impl};
+
+/// Structured Data
+#[derive(Clone, TypedUserData)]
 struct Data {
+    /// Name of the data source
     name: String
 }
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl Data {
     #[method]
     fn get_data(&self) -> mlua::Result<String> {
@@ -43,19 +47,31 @@ impl Data {
     }
 }
 
-#[derive(Clone, UserData)]
-enum Kind {
+/// Kind of action
+#[derive(Clone, TypedUserData)]
+enum Custom {
     A,
-    B(String),
+    B(
+        /// Variant B Data
+        String
+    ),
     C {
         name: String,
+        /// Age of variant C
         age: u8,
     },
-    D(u32),
+    D(
+        /// Variant D Data
+        u32
+    ),
 }
 
-#[user_data_impl]
-impl Kind {
+#[typed_user_data_impl]
+impl Custom {
+    /// Static field provided to Lua
+    const COUNT: usize = 10;
+
+    /// Get the message based on the variant
     #[method]
     fn message(&self) -> String {
         match self {
@@ -68,10 +84,10 @@ impl Kind {
 }
 
 fn main() -> mlua::Result<()> {
-    let lua = unsafe { Lua::unsafe_new_with(StdLib::ALL, Default::default()) };
+    let lua = Lua::new();
 
     lua.globals().set("data", Data { name: "MluaExtras".into() })?;
-    lua.globals().set("kind", Kind::A)?;
+    lua.globals().set("kind", Custom::A)?;
 
     lua.load("
     print('Index [1]:', data[1])
@@ -81,9 +97,29 @@ fn main() -> mlua::Result<()> {
     print('Index [-1]:', data[-1])
     print('Kind:', kind._variant, kind:message())
 
-    local ok, value = pcall(function() return kind[1] end)
-    print('Kind [1]: OK', ok, value)
+    local ok, value = pcall(function () return kind[1] end)
+    print('Kind [1]: OK', ok, tostring(value):match('(.-)\\n') or tostring(value))
     ").exec()?;
+
+    let definitions: Definitions = Definitions::start()
+        .define(
+            "macros",
+            Definition::start()
+                .register::<Data>("Data")
+                .register::<Custom>("Kind")
+        )
+        .finish();
+
+    let types_path = PathBuf::from("examples/types");
+    if !types_path.exists() {
+        std::fs::create_dir_all(&types_path).unwrap();
+    }
+
+    let dfg = DefinitionFileGenerator::new(definitions.clone());
+    for (name, writer) in dfg.iter() {
+        println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        writer.write_file(types_path.join(name)).unwrap();
+    }
 
     Ok(())
 }

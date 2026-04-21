@@ -62,12 +62,12 @@ pub fn derive(item: ItemImpl) -> TokenStream {
 
         impl #generics #self_ty {
             #[doc(hidden)]
-            fn __auto_add_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+            fn __auto_add_fields<F: mlua_extras::typed::TypedDataFields<Self>>(fields: &mut F) {
                 #(#field_registrations)*
             }
 
             #[doc(hidden)]
-            fn __auto_add_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+            fn __auto_add_methods<M: mlua_extras::typed::TypedDataMethods<Self>>(methods: &mut M) {
                 #(#method_registrations)*
             }
         }
@@ -122,12 +122,24 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
 
     let is_meta = info.kind.is_meta();
 
+    let doc_stmt = info.doc.as_ref().map(|doc| {
+        quote! { methods.document(#doc); }
+    });
+
+    let param_stmts: Vec<_> = info.params.iter().map(|(name, _)| {
+        let name_str = name.to_string();
+        // TODO: Update this to parse param docs somehow
+        quote! { methods.param(#name_str, ()); }
+    }).collect();
+
     if info.r#async {
         // Async methods
         match &info.instance {
             Some(PassBy::Ref) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args).await });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_async_method(#lua_name, |#lua_ident, this, #params_destructure| async move {
                         #body
                     });
@@ -136,6 +148,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
             Some(PassBy::RefMut) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args).await });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_async_method_mut(#lua_name, |#lua_ident, this, #params_destructure| async move {
                         #body
                     });
@@ -145,6 +159,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
                 let body =
                     build_call_and_return(quote! { #self_ty::#fn_name(#call_args).await });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_async_function(#lua_name, |#lua_ident, #params_destructure| async move {
                         #body
                     });
@@ -157,6 +173,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
             (Some(PassBy::Ref), false) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args) });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_method(#lua_name, |#lua_ident, this, #params_destructure| {
                         #body
                     });
@@ -165,6 +183,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
             (Some(PassBy::Ref), true) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args) });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_meta_method(#lua_name, |#lua_ident, this, #params_destructure| {
                         #body
                     });
@@ -173,6 +193,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
             (Some(PassBy::RefMut), false) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args) });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_method_mut(#lua_name, |#lua_ident, this, #params_destructure| {
                         #body
                     });
@@ -181,6 +203,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
             (Some(PassBy::RefMut), true) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args) });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_meta_method_mut(#lua_name, |#lua_ident, this, #params_destructure| {
                         #body
                     });
@@ -190,6 +214,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
                 let body =
                     build_call_and_return(quote! { #self_ty::#fn_name(#call_args) });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_function(#lua_name, |#lua_ident, #params_destructure| {
                         #body
                     });
@@ -199,6 +225,8 @@ fn generate_method_registration(info: &UserDataMethod, self_ty: &Type) -> TokenS
                 let body =
                     build_call_and_return(quote! { #self_ty::#fn_name(#call_args) });
                 quote! {
+                    #doc_stmt
+                    #(#param_stmts)*
                     methods.add_meta_function(#lua_name, |#lua_ident, #params_destructure| {
                         #body
                     });
@@ -212,5 +240,12 @@ fn generate_field_registration(info: &UserDataField) -> TokenStream {
     let name = info.ident.as_ref().unwrap();
     let lua_name = info.rename.clone().map(|v| v.to_string()).unwrap_or_else(|| name.to_string());
 
-    quote! { fields.add_field(#lua_name, Self::#name); }
+    let doc_stmt = info.attrs.as_ref().map(|doc| {
+        quote! { fields.document(#doc); }
+    });
+
+    quote! {
+        #doc_stmt
+        fields.add_field(#lua_name, Self::#name);
+    }
 }

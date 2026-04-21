@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::Path, slice::Iter};
 
-use crate::typed::{function::Return, Param, Type};
+use crate::typed::{Field, Param, StaticField, Type, function::Return};
 
 use super::{Definition, Definitions};
 
@@ -127,17 +127,6 @@ impl<'writer> DefinitionWriter<'writer> {
                     }
                     writeln!(buffer)?;
 
-                    for (name, field) in type_data.static_fields.iter() {
-                        if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
-                            writeln!(buffer, "{}", docs.join("\n"))?;
-                        }
-                        writeln!(
-                            buffer,
-                            "--- @field {name} {}",
-                            self.type_signature(&field.ty)?
-                        )?;
-                    }
-
                     for (name, field) in type_data.fields.iter() {
                         if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
                             writeln!(buffer, "{}", docs.join("\n"))?;
@@ -149,15 +138,24 @@ impl<'writer> DefinitionWriter<'writer> {
                         )?;
                     }
 
-                    if !type_data.functions.is_empty() || !type_data.methods.is_empty() || !type_data.is_meta_empty() {
+                    if !type_data.static_fields.is_empty() || !type_data.functions.is_empty() || !type_data.methods.is_empty() || !type_data.is_meta_empty() {
                         writeln!(buffer, "local _CLASS_{}_ = {{", definition.name)?;
+                        for (name, StaticField { inner: Field { ty, doc }, default }) in type_data.static_fields.iter() {
+                            if let Some(docs) = self.accumulate_docs(&[doc.as_deref()]) {
+                                writeln!(buffer, "\t{}", docs.join("\n\t"))?;
+                            }
+
+                            writeln!(buffer, "\t--- @type {}", self.type_signature(ty)?)?;
+                            writeln!(buffer, "\t{name} = {default},")?;
+                        }
+
                         for (name, func) in type_data.functions.iter() {
                             if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                                writeln!(buffer, "  {}", docs.join("\n  "))?;
+                                writeln!(buffer, "\t{}", docs.join("\n\t"))?;
                             }
                             writeln!(
                                 buffer,
-                                "  {},",
+                                "\t{},",
                                 self.function_signature(
                                     name,
                                     &func.params,
@@ -170,11 +168,11 @@ impl<'writer> DefinitionWriter<'writer> {
 
                         for (name, func) in type_data.methods.iter() {
                             if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                                writeln!(buffer, "  {}", docs.join("\n  "))?;
+                                writeln!(buffer, "\t{}", docs.join("\n\t"))?;
                             }
                             writeln!(
                                 buffer,
-                                "  {},",
+                                "\t{},",
                                 self.method_signature(
                                     name,
                                     definition.name.to_string(),
@@ -187,56 +185,59 @@ impl<'writer> DefinitionWriter<'writer> {
                         }
 
                         if !type_data.is_meta_empty() {
-                            if !type_data.meta_fields.is_empty()
-                                || !type_data.meta_functions.is_empty()
-                                    || !type_data.meta_methods.is_empty()
-                            {
-                                writeln!(buffer, "  __metatable = {{")?;
-                                for (name, field) in type_data.meta_fields.iter() {
-                                    if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
-                                        writeln!(buffer, "    {}", docs.join("\n    "))?;
-                                    }
-                                    writeln!(buffer, "    --- @type {}", self.type_signature(&field.ty)?)?;
-                                    writeln!(buffer, "    {name} = nil,")?;
+                            writeln!(buffer, "\t__metatable = {{")?;
+                            for (name, StaticField { inner: Field { ty, doc }, default }) in type_data.static_meta_fields.iter() {
+                                if let Some(docs) = self.accumulate_docs(&[doc.as_deref()]) {
+                                    writeln!(buffer, "\t\t{}", docs.join("\n\t\t"))?;
                                 }
 
-                                for (name, func) in type_data.meta_functions.iter() {
-                                    if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                                        writeln!(buffer, "    {}", docs.join("\n    "))?;
-                                    }
-                                    writeln!(
-                                        buffer,
-                                        "    {},",
-                                        self.function_signature(
-                                            name,
-                                            &func.params,
-                                            &func.returns,
-                                            true
-                                        )?
-                                        .join("\n    ")
-                                    )?;
-                                }
-
-                                for (name, func) in type_data.meta_methods.iter() {
-                                    if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
-                                        writeln!(buffer, "    {}", docs.join("\n    "))?;
-                                    }
-                                    writeln!(
-                                        buffer,
-                                        "    {},",
-                                        self.method_signature(
-                                            name,
-                                            definition.name.to_string(),
-                                            &func.params,
-                                            &func.returns,
-                                            true
-                                        )?
-                                        .join("\n    ")
-                                    )?;
-                                }
-                                writeln!(buffer, "  }}")?;
+                                writeln!(buffer, "\t\t--- @type {}", self.type_signature(ty)?)?;
+                                writeln!(buffer, "\t\t{name} = {default},")?;
                             }
 
+                            for (name, field) in type_data.meta_fields.iter() {
+                                if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
+                                    writeln!(buffer, "\t\t{}", docs.join("\n\t\t"))?;
+                                }
+                                writeln!(buffer, "\t\t--- @type {}", self.type_signature(&field.ty)?)?;
+                                writeln!(buffer, "\t\t{name} = nil,")?;
+                            }
+
+                            for (name, func) in type_data.meta_functions.iter() {
+                                if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
+                                    writeln!(buffer, "\t\t{}", docs.join("\n\t\t"))?;
+                                }
+                                writeln!(
+                                    buffer,
+                                    "\t\t{},",
+                                    self.function_signature(
+                                        name,
+                                        &func.params,
+                                        &func.returns,
+                                        true
+                                    )?
+                                    .join("\n    ")
+                                )?;
+                            }
+
+                            for (name, func) in type_data.meta_methods.iter() {
+                                if let Some(docs) = self.accumulate_docs(&[func.doc.as_deref()]) {
+                                    writeln!(buffer, "\t\t{}", docs.join("\n\t\t"))?;
+                                }
+                                writeln!(
+                                    buffer,
+                                    "\t\t{},",
+                                    self.method_signature(
+                                        name,
+                                        definition.name.to_string(),
+                                        &func.params,
+                                        &func.returns,
+                                        true
+                                    )?
+                                    .join("\n    ")
+                                )?;
+                            }
+                            writeln!(buffer, "  }}")?;
                         }
                         writeln!(buffer, "}}")?;
                     }

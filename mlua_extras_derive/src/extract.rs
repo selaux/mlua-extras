@@ -3,8 +3,7 @@ use deluxe::{ParseAttributes, ParseMetaItem};
 use proc_macro2::{Literal, TokenStream};
 use quote::ToTokens;
 use syn::{
-    spanned::Spanned, Attribute, Expr, ExprLit, FnArg, ImplItemFn, Lit, Meta, MetaNameValue, Pat,
-    PatIdent, ReturnType,
+    Attribute, Expr, ExprLit, FnArg, ImplItemConst, ImplItemFn, Lit, Meta, MetaNameValue, Pat, PatIdent, ReturnType, spanned::Spanned
 };
 
 pub fn doc_comment(attrs: &[syn::Attribute]) -> Option<String> {
@@ -73,6 +72,29 @@ pub struct UserDataField {
     pub rename: Option<Index>,
 }
 
+impl UserDataField {
+    pub fn from_impl_const(field: &ImplItemConst) -> Option<Self> {
+        let field_attr = field
+            .attrs
+            .iter()
+            .find(|a| is_field_attr(a))
+            .map(|a| deluxe::parse_attributes::<_, Field>(a).unwrap_or_default())
+            .unwrap_or_default();
+
+        let docs = doc_comment(&field.attrs);
+
+        Some(Self {
+            ident: Some(field.ident.clone()),
+            ty: field.ty.clone(),
+            attrs: docs,
+            skip: field_attr.skip,
+            rename: field_attr.rename.map(Index::Str),
+            readonly: true,
+            writeonly: false,
+        })
+    }
+}
+
 #[derive(Debug, darling::FromField)]
 #[darling(attributes(field), forward_attrs(doc))]
 pub struct UserDataEnumField {
@@ -81,6 +103,8 @@ pub struct UserDataEnumField {
     
     #[darling(default, skip)]
     pub variant: TokenStream,
+    #[darling(default, skip)]
+    pub variant_name: String,
     #[darling(default, skip)]
     pub accessor: TokenStream,
 
@@ -103,20 +127,15 @@ pub struct UserDataEnumField {
 pub enum PassBy {
     Ref,
     RefMut,
-    Value,
 }
 impl PassBy {
     fn from_fn_arg(value: Option<&FnArg>) -> Option<Self> {
         match value {
             Some(FnArg::Receiver(recv)) => {
-                if recv.reference.is_some() {
-                    if recv.mutability.is_some() {
-                        Some(PassBy::RefMut)
-                    } else {
-                        Some(PassBy::Ref)
-                    }
+                if recv.reference.is_some() && recv.mutability.is_some() {
+                    Some(PassBy::RefMut)
                 } else {
-                    Some(PassBy::Value)
+                    Some(PassBy::Ref)
                 }
             }
             Some(FnArg::Typed(typed)) => {
@@ -128,14 +147,10 @@ impl PassBy {
                 }) = &*typed.pat
                 {
                     if ident == "self" {
-                        if by_ref.is_some() {
-                            if mutability.is_some() {
-                                Some(PassBy::RefMut)
-                            } else {
-                                Some(PassBy::Ref)
-                            }
+                        if by_ref.is_some() && mutability.is_some() {
+                            Some(PassBy::RefMut)
                         } else {
-                            Some(PassBy::Value)
+                            Some(PassBy::Ref)
                         }
                     } else {
                         None
@@ -173,6 +188,17 @@ struct Method {
     rename: Option<String>,
 }
 
+#[derive(Default, Debug, ParseAttributes)]
+#[deluxe(default, attributes(method))]
+struct Field {
+    skip: bool,
+    rename: Option<String>,
+}
+
+pub fn is_field_attr(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("field")
+}
+
 pub fn is_method_attr(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("method")
 }
@@ -196,7 +222,7 @@ pub struct UserDataMethod {
     pub kind: MethodKind,
 }
 impl UserDataMethod {
-    pub fn from_imp_fn(method: &ImplItemFn) -> Option<Self> {
+    pub fn from_impl_fn(method: &ImplItemFn) -> Option<Self> {
         let method_attr = method
             .attrs
             .iter()
@@ -378,7 +404,31 @@ pub enum Index {
     Int(isize),
     Str(String),
 }
+impl ParseMetaItem for Index {
+    fn parse_meta_item(input: syn::parse::ParseStream, _mode: deluxe::ParseMode) -> deluxe::Result<Self> {
+        let lit: Lit = input.parse()?;
+
+        match lit {
+            Lit::Int(int) => {
+                let val = int.base10_parse::<isize>()?;
+                Ok(Self::Int(val))
+            },
+            Lit::Str(s) => {
+                Ok(Self::Str(s.value()))
+            },
+            _ => Err(deluxe::Error::new(lit.span(), "Expected string or integer"))
+        }
+    }
+}
+
 impl Index {
+    pub fn as_int(&self) -> isize {
+        match self {
+            Self::Int(v) => *v,
+            Self::Str(_) => 0
+        }
+    }
+
     pub fn is_str(&self) -> bool {
         match self {
             Self::Str(_) => true,

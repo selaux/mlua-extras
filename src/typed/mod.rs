@@ -4,7 +4,7 @@ pub mod generator;
 mod class;
 
 pub use class::{
-    TypedClassBuilder, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedUserData,
+    TypedClassBuilder, TypedClass, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedUserData,
     WrappedBuilder,
 };
 
@@ -187,7 +187,7 @@ pub enum Type {
     /// --- @field age integer
     /// --- @field height number
     /// ```
-    Class(Box<TypedClassBuilder>),
+    Class(Box<TypedClass>),
 }
 
 /// Allows to union types
@@ -327,7 +327,7 @@ impl Type {
     }
 
     /// create a type that is a class. i.e. `--- @class {name}`
-    pub fn class(class: TypedClassBuilder) -> Self {
+    pub fn class(class: TypedClass) -> Self {
         Self::Class(Box::new(class))
     }
 
@@ -865,6 +865,25 @@ impl Field {
         Self {
             ty,
             doc: doc.into_doc_comment(),
+        }
+    }
+}
+
+/// Type information for a lua `class` field
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+pub struct StaticField {
+    pub inner: Field,
+    pub default: Cow<'static, str>,
+}
+
+impl StaticField {
+    pub fn new(ty: Type, doc: impl IntoDocComment, default: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            inner: Field {
+                ty,
+                doc: doc.into_doc_comment(),
+            },
+            default: default.into()
         }
     }
 }

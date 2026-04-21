@@ -6,12 +6,13 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use syn::{Data, DeriveInput, Fields, LitInt, spanned::Spanned};
 use quote::quote;
 
-use crate::extract::{Index, UserDataEnumField, UserDataField};
+use crate::extract::{Index, UserDataEnumField, UserDataField, doc_comment};
 
 pub fn derive(input: DeriveInput) -> TokenStream2 {
-    let name = &input.ident;
+    let name = input.ident.clone();
 
-    match &input.data {
+    let doc_stmt = doc_comment(&input.attrs);
+    let impls = match &input.data {
         Data::Struct(data) => {
             let fields: Vec<_> = match &data.fields {
                 Fields::Named(named) => named.named.iter().collect(),
@@ -29,7 +30,8 @@ pub fn derive(input: DeriveInput) -> TokenStream2 {
                 })
                 .collect::<Vec<UserDataField>>();
 
-            derive_struct(name, user_fields)
+
+            derive_struct(name, doc_stmt, user_fields)
         },
         Data::Enum(data) => {
             let mut enum_fields: BTreeMap<Index, Vec<UserDataEnumField>> = Default::default();
@@ -69,6 +71,7 @@ pub fn derive(input: DeriveInput) -> TokenStream2 {
                             }
 
                             uf.variant = variant.clone();
+                            uf.variant_name = vn.to_string();
                             uf.accessor = match uf.ident.as_ref() {
                                 Some(ident) => {
                                     let i = format_ident!("_{ident}");
@@ -95,15 +98,22 @@ pub fn derive(input: DeriveInput) -> TokenStream2 {
                 }
             }
 
-            derive_enum(name, variants, enum_fields)
+            derive_enum(name, doc_stmt, variants, enum_fields)
         }
         Data::Union(_) => {
             proc_macro_error::abort!(name, "TypedUserData does not support unions");
         }
+    };
+
+    let typed_impl = super::derive(input);
+    quote!{
+        #impls
+        #typed_impl
     }
+
 }
 
-fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStream2 {
+fn derive_struct(name: syn::Ident, doc_stmt: Option<String>, user_fields: Vec<UserDataField>) -> TokenStream2 {
     let field_registrations = user_fields
         .iter()
         .enumerate()
@@ -122,23 +132,29 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
 
             let field_ty = &fi.ty;
 
+            let doc_stmt = fi.attrs.as_ref().map(|doc| {
+                quote! { fields.document(#doc); }
+            });
+
             match (fi.skip, fi.readonly, fi.writeonly) {
                 (true, _, _) => None,
                 (_, true, true) | (_, false, false) => Some(quote! {
-                    mlua_extras::extras::UserDataGetSet::<Self>::add_field_method_get_set(
-                        fields,
+                    #doc_stmt
+                    fields.add_field_method_get_set(
                         #index,
                         |_lua, this| Ok(this.#field_ident.clone()),
                         |_lua, this, _value: #field_ty| { this.#field_ident = _value; Ok(()) },
                     );
                 }),
                 (_, true, false) => Some(quote! {
+                    #doc_stmt
                     fields.add_field_method_get(
                         #index,
                         |_lua, this| Ok(this.#field_ident.clone()),
                     );
                 }),
                 (_, false, true) => Some(quote! {
+                    #doc_stmt
                     fields.add_field_method_set(
                         #index,
                         |_lua, this, _value: #field_ty| { this.#field_ident = _value; Ok(()) },
@@ -152,6 +168,8 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
     // Add a custom __index and __newindex for the tuple struct/enum fields
     // this will always attempt to fallback to the user definend #[metamethod(Index)] or #[metamethod(NewIndex)]
     {
+        let mut index_types: BTreeMap<isize, (syn::Type, Option<String>)> = Default::default();
+
         let indexes = user_fields
             .iter()
             .enumerate()
@@ -171,10 +189,15 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
                                 quote!(#i)
                             }
                         };
-                        let lua_idx = LitInt::new(&Literal::isize_unsuffixed(match f.rename {
+
+                        let lua_idx = match f.rename {
                             Some(Index::Int(v)) => v,
                             _ => i as isize + 1
-                        }).to_string(), Span::call_site());
+                        };
+
+                        index_types.insert(lua_idx, (f.ty.clone(), f.attrs.clone()));
+
+                        let lua_idx = LitInt::new(&Literal::isize_unsuffixed(lua_idx).to_string(), Span::call_site());
 
                         Some(quote!(Some(#lua_idx) => return mlua_extras::mlua::IntoLua::into_lua(this.#idx.clone(), _lua),))
                     },
@@ -200,10 +223,17 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
                                 quote!(#i)
                             }
                         };
-                        let lua_idx = Some(LitInt::new(&Literal::isize_unsuffixed(match f.rename {
+
+                        let lua_idx = match f.rename {
                             Some(Index::Int(v)) => v,
                             _ => i as isize + 1
-                        }).to_string(), Span::call_site()));
+                        };
+
+                        if !index_types.contains_key(&lua_idx) {
+                            index_types.insert(lua_idx, (f.ty.clone(), f.attrs.clone()));
+                        }
+
+                        let lua_idx = Some(LitInt::new(&Literal::isize_unsuffixed(lua_idx).to_string(), Span::call_site()));
                         let ty = &f.ty;
 
                         Some(quote!(Some(#lua_idx) => {
@@ -214,7 +244,20 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
                 }
             }).collect::<Vec<_>>();
 
+        let index_types = index_types
+            .iter()
+            .map(|(k, (ty, doc))| {
+                let idx = LitInt::new(&Literal::isize_unsuffixed(*k).to_string(), Span::call_site());
+                let doc = match doc {
+                    Some(doc) => quote!(#doc),
+                    None => quote!(())
+                };
+                quote!(methods.index_as(#idx, #ty, #doc);)
+            });
+
         method_registrations.push(quote!{
+            #(#index_types)*
+
             methods.add_meta_function(mlua_extras::mlua::MetaMethod::Index, |_lua, (this, _idx): (mlua_extras::mlua::AnyUserData, mlua_extras::mlua::Value)| {
                 {
                     let this = this.borrow::<Self>()?;
@@ -259,37 +302,58 @@ fn derive_struct(name: &syn::Ident, user_fields: Vec<UserDataField>) -> TokenStr
         });
     }
 
+    let doc_stmt = match doc_stmt {
+        Some(doc) => quote!(docs.add(#doc);),
+        None => quote!()
+    };
+
     quote! {
         impl #name {
             #[doc(hidden)]
-            fn __implicit_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+            fn __implicit_fields<F: mlua_extras::typed::TypedDataFields<Self>>(fields: &mut F) {
                 #(#field_registrations)*
             }
             #[doc(hidden)]
-            fn __implicit_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+            fn __implicit_methods<M: mlua_extras::typed::TypedDataMethods<Self>>(methods: &mut M) {
                 #(#method_registrations)*
             }
         }
 
-        impl mlua_extras::mlua::UserData for #name {
-            fn add_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+        impl mlua_extras::typed::TypedUserData for #name {
+            fn add_documentation<F: mlua_extras::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
+                #doc_stmt
+            }
+
+            fn add_fields<F: mlua_extras::typed::TypedDataFields<Self>>(fields: &mut F) {
                 Self::__implicit_fields(fields);
 
                 use mlua_extras::__DefaultAutoFields as _;
                 Self::__auto_add_fields(fields);
             }
 
-            fn add_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+            fn add_methods<M: mlua_extras::typed::TypedDataMethods<Self>>(methods: &mut M) {
                 Self::__implicit_methods(methods);
 
                 use mlua_extras::__DefaultAutoMethods as _;
                 Self::__auto_add_methods(methods);
             }
         }
+
+        impl mlua_extras::mlua::UserData for #name {
+            fn add_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(fields);
+                <Self as mlua_extras::typed::TypedUserData>::add_fields(&mut wrapper);
+            }
+        
+            fn add_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(methods);
+                <Self as mlua_extras::typed::TypedUserData>::add_methods(&mut wrapper);
+            }
+        }
     }
 }
 
-fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)>, user_fields: BTreeMap<Index, Vec<UserDataEnumField>>) -> TokenStream2 {
+fn derive_enum(name: syn::Ident, doc_stmt: Option<String>, enum_variants: Vec<(TokenStream2, &syn::Ident)>, user_fields: BTreeMap<Index, Vec<UserDataEnumField>>) -> TokenStream2 {
     let count = enum_variants.len();
 
     let field_registrations = user_fields
@@ -351,22 +415,38 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
                 })
             };
 
+            let doc_stmt = fi
+                .iter()
+                .filter_map(|f| {
+                    f.attrs.as_deref().map(|doc| format!("**{}:** {}", f.variant_name, doc))
+                })
+                .collect::<Vec<_>>();
+
+            let doc_stmt = if doc_stmt.is_empty() {
+                quote!()
+            } else {
+                let doc = doc_stmt.join("\n");
+                quote! { fields.document(#doc); }
+            };
+
             match (has_get, has_set) {
                 (true, true) | (false, false) => Some(quote! {
-                    mlua_extras::extras::UserDataGetSet::<Self>::add_field_method_get_set(
-                        fields,
+                    #doc_stmt
+                    fields.add_field_method_get_set(
                         #idx,
                         |_lua, this| #getter,
                         |_lua, this, _value: mlua_extras::mlua::Value| #setter,
                     );
                 }),
                 (true, false) => Some(quote! {
+                    #doc_stmt
                     fields.add_field_method_get(
                         #idx,
                         |_lua, this| #getter,
                     );
                 }),
                 (false, true) => Some(quote! {
+                    #doc_stmt
                     fields.add_field_method_set(
                         #idx,
                         |_lua, this, _value: mlua_extras::mlua::Value| #setter,
@@ -380,21 +460,32 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
     // Add a custom __index and __newindex for the tuple struct/enum fields
     // this will always attempt to fallback to the user definend #[metamethod(Index)] or #[metamethod(NewIndex)]
     {
+        let mut index_types: BTreeMap<isize, Vec<(syn::Type, Option<String>)>> = Default::default();
+
         let indexes = user_fields
             .iter()
             .filter(|(idx, _fi)| !idx.is_str())
             .filter_map(|(idx, f)| {
+                let mut types = Vec::new();
                 let variants: Vec<_> = f
                     .iter()
                     .filter(|f| f.readonly || (!f.readonly && !f.writeonly))
                     .map(|f| {
                         let variant = &f.variant;
                         let accessor = &f.accessor;
+
+                        types.push((f.ty.clone(), f.attrs.clone().map(|doc| format!("**{}:** {}", f.variant_name, doc))));
+
                         quote!{
                             Self::#variant => return mlua_extras::mlua::IntoLua::into_lua(#accessor.clone(), _lua),
                         }
                     })
                     .collect();
+
+                if !types.is_empty() {
+                    let i = idx.as_int();
+                    index_types.insert(i, types);
+                }
 
                 if variants.is_empty() {
                     return None;
@@ -418,6 +509,7 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
             .iter()
             .filter(|(idx, _fi)| !idx.is_str())
             .filter_map(|(idx, f)| {
+                let mut types = Vec::new();
                 let variants: Vec<_> = f
                     .iter()
                     .filter(|f| f.writeonly || (!f.readonly && !f.writeonly))
@@ -425,6 +517,9 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
                         let variant = &f.variant;
                         let accessor = &f.accessor;
                         let ty = &f.ty;
+
+                        types.push((f.ty.clone(), f.attrs.clone().map(|doc| format!("**{}:** {}", f.variant_name, doc))));
+
                         quote!{
                             Self::#variant => {
                                 *#accessor = <#ty as mlua_extras::mlua::FromLua>::from_lua(_value.clone(), _lua)?;
@@ -433,6 +528,13 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
                         }
                     })
                     .collect();
+
+                if !types.is_empty() {
+                    let i = idx.as_int();
+                    if !index_types.contains_key(&i) {
+                        index_types.insert(i, types);
+                    }
+                }
 
                 if variants.is_empty() {
                     return None;
@@ -452,7 +554,29 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
                 })
             }).collect::<Vec<_>>();
 
+        let index_types = index_types
+            .iter()
+            .map(|(k, types)| {
+                let idx = LitInt::new(&Literal::isize_unsuffixed(*k).to_string(), Span::call_site());
+
+                let docs = types.iter().filter_map(|(_, d)| d.clone()).collect::<Vec<_>>();
+
+                let doc = if docs.is_empty() {
+                    quote!(())
+                } else {
+                    let docs = docs.join("\n");
+                    quote!(#docs)
+                };
+
+                let mut types = types.iter().map(|(ty, _)| quote!(<#ty as mlua_extras::typed::Typed>::ty()));
+                let first = types.next().unwrap();
+
+                quote!(methods.index_as(#idx, #first #(|#types)*, #doc);)
+            });
+
         method_registrations.push(quote!{
+            #(#index_types)*
+
             methods.add_meta_function(mlua_extras::mlua::MetaMethod::Index, |_lua, (this, _idx): (mlua_extras::mlua::AnyUserData, mlua_extras::mlua::Value)| {
                 {
                     let this = this.borrow::<Self>()?;
@@ -501,39 +625,65 @@ fn derive_enum(name: &syn::Ident, enum_variants: Vec<(TokenStream2, &syn::Ident)
         let name = n.to_string();
         quote!(Self::#v => #name)
     });
+    let variant_names = enum_variants.iter().map(|(_, n)| n.to_string());
+
+    let doc_stmt = match doc_stmt {
+        Some(doc) => quote!(docs.add(#doc);),
+        None => quote!()
+    };
 
 
     quote! {
         impl #name {
             #[doc(hidden)]
-            fn __implicit_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+            fn __implicit_fields<F: mlua_extras::typed::TypedDataFields<Self>>(fields: &mut F) {
+                fields.document("Current variant name");
                 fields.add_field_method_get("_variant", |_lua, this| {
                     Ok(match this {
                         #(#variants,)*
                     })
                 });
 
+                fields.document("Full list of variant name");
+                fields.add_field("_variants", [#(#variant_names,)*]);
+
                 #(#field_registrations)*
             }
             #[doc(hidden)]
-            fn __implicit_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+            fn __implicit_methods<M: mlua_extras::typed::TypedDataMethods<Self>>(methods: &mut M) {
                 #(#method_registrations)*
             }
         }
 
-        impl mlua_extras::mlua::UserData for #name {
-            fn add_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+        impl mlua_extras::typed::TypedUserData for #name {
+            fn add_documentation<F: mlua_extras::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
+                #doc_stmt
+            }
+
+            fn add_fields<F: mlua_extras::typed::TypedDataFields<Self>>(fields: &mut F) {
                 Self::__implicit_fields(fields);
 
                 use mlua_extras::__DefaultAutoFields as _;
                 Self::__auto_add_fields(fields);
             }
 
-            fn add_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+            fn add_methods<M: mlua_extras::typed::TypedDataMethods<Self>>(methods: &mut M) {
                 Self::__implicit_methods(methods);
 
                 use mlua_extras::__DefaultAutoMethods as _;
                 Self::__auto_add_methods(methods);
+            }
+        }
+
+        impl mlua_extras::mlua::UserData for #name {
+            fn add_fields<F: mlua_extras::mlua::UserDataFields<Self>>(fields: &mut F) {
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(fields);
+                <Self as mlua_extras::typed::TypedUserData>::add_fields(&mut wrapper);
+            }
+        
+            fn add_methods<M: mlua_extras::mlua::UserDataMethods<Self>>(methods: &mut M) {
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(methods);
+                <Self as mlua_extras::typed::TypedUserData>::add_methods(&mut wrapper);
             }
         }
     }
