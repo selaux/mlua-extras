@@ -7,7 +7,7 @@ pub mod extras;
 pub use mlua;
 
 #[cfg(feature="derive")]
-pub use mlua_extras_derive::{Typed, UserData};
+pub use mlua_extras_derive::{Typed, UserData, user_data_impl};
 
 #[cfg(feature = "send")]
 /// Used by the `send` feature
@@ -20,3 +20,11 @@ impl<T: Send> MaybeSend for T {}
 pub trait MaybeSend {}
 #[cfg(not(feature = "send"))]
 impl<T> MaybeSend for T {}
+
+#[cfg(feature = "derive")]
+#[doc(hidden)]
+pub trait __DefaultAutoMethods: Sized {
+    fn __auto_add_methods<M>(_m: &mut M) {}
+}
+#[cfg(feature = "derive")]
+impl<T: Sized> __DefaultAutoMethods for T {}
