@@ -342,7 +342,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -365,7 +370,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -390,7 +400,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -413,7 +428,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -436,7 +456,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -461,7 +486,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -509,7 +539,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })

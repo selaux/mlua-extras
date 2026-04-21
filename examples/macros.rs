@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use mlua::{IntoLua, FromLua, Lua, StdLib};
-use mlua_extras::{TypedUserData, typed::generator::{Definition, DefinitionFileGenerator, Definitions}, typed_user_data_impl};
+use mlua_extras::{TypedUserData, UserData, typed::generator::{Definition, DefinitionFileGenerator, Definitions}, typed_user_data_impl, user_data_impl};
 
 /// Structured Data
 #[derive(Clone, TypedUserData)]
@@ -70,6 +70,18 @@ enum Custom {
 impl Custom {
     /// Static field provided to Lua
     const COUNT: usize = 10;
+
+    /// Get the direction [Getter]
+    #[getter("direction")]
+    fn get_direction(&self) -> String {
+        "west".into()
+    }
+
+    /// Get the direction [Setter]
+    #[setter("direction")]
+    fn set_direction(&self, input: String) {
+        _ = input;
+    }
 
     /// Get the message based on the variant
     #[method]

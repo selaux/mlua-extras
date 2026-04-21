@@ -164,19 +164,36 @@ impl PassBy {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, strum::EnumIs)]
 pub enum MethodKind {
     Regular,
     Meta,
+    Getter,
+    Setter,
 }
 impl MethodKind {
-    pub fn is_meta(&self) -> bool {
+    pub fn is_field(&self) -> bool {
         match self {
-            Self::Regular => false,
-            Self::Meta => true,
+            Self::Getter | Self::Setter => true,
+            _ => false
         }
     }
+
+    pub fn is_attr(attr: &syn::Attribute) -> bool {
+        is_method_attr(attr)
+            || is_metamethod_attr(attr)
+            || is_getter_attr(attr)
+            || is_setter_attr(attr)
+    }
 }
+
+#[derive(Debug, ParseAttributes)]
+#[deluxe(attributes(getter))]
+struct Getter(String);
+
+#[derive(Debug, ParseAttributes)]
+#[deluxe(attributes(setter))]
+struct Setter(String);
 
 #[derive(Debug, ParseAttributes)]
 #[deluxe(attributes(metamethod))]
@@ -207,6 +224,14 @@ pub fn is_metamethod_attr(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("metamethod")
 }
 
+pub fn is_getter_attr(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("getter")
+}
+
+pub fn is_setter_attr(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("setter")
+}
+
 #[derive(Debug)]
 pub struct UserDataMethod {
     #[allow(dead_code)]
@@ -228,6 +253,7 @@ impl UserDataMethod {
             .iter()
             .find(|a| is_method_attr(a))
             .map(|a| deluxe::parse_attributes::<_, Method>(a).unwrap_or_default());
+
         let metamethod_attr = match method
             .attrs
             .iter()
@@ -235,21 +261,48 @@ impl UserDataMethod {
         {
             Some(a) => match deluxe::parse_attributes::<_, MetaMethod>(a) {
                 Ok(v) => Some(v),
-                Err(err) => proc_macro_error::abort!(method.span(), "{}", err),
+                Err(err) => proc_macro_error::abort!(method, "{}", err),
             },
             None => None,
         };
 
-        if method_attr.is_some() && metamethod_attr.is_some() {
-            return None;
-        }
+        let getter_attr = match method
+            .attrs
+            .iter()
+            .find(|a| is_getter_attr(a)) 
+        {
+            Some(a) => match deluxe::parse_attributes::<_, Getter>(a) {
+                Ok(v) => Some(v),
+                Err(err) => proc_macro_error::abort!(method, "{}", err),
+            },
+            None => None
+        };
+
+        let setter_attr = match method
+            .attrs
+            .iter()
+            .find(|a| is_setter_attr(a))
+        {
+            Some(a) => match deluxe::parse_attributes::<_, Setter>(a) {
+                Ok(v) => Some(v),
+                Err(err) => proc_macro_error::abort!(method, "{}", err),
+            },
+            None => None
+        };
+
+        let matches = method_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + metamethod_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + getter_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + setter_attr.as_ref().map(|_| 1).unwrap_or_default();
+
+        if matches != 1 { return None; }
 
         let fn_name = method.sig.ident.clone();
         let is_async = method.sig.asyncness.is_some();
         let instance = PassBy::from_fn_arg(method.sig.inputs.first());
         let doc = doc_comment(&method.attrs);
 
-        let (lua_name, kind) = if let Some(Method { rename }) = method_attr {
+        let (lua_name, kind): (TokenStream, MethodKind) = if let Some(Method { rename }) = method_attr {
             let name = rename.unwrap_or_else(|| fn_name.to_string());
             (quote!(#name), MethodKind::Regular)
         } else if let Some(MetaMethod(target)) = metamethod_attr {
@@ -262,6 +315,10 @@ impl UserDataMethod {
             } else {
                 (quote!(#target), MethodKind::Meta)
             }
+        } else if let Some(Getter(field)) = getter_attr {
+            (quote!(#field), MethodKind::Getter)
+        } else if let Some(Setter(field)) = setter_attr {
+            (quote!(#field), MethodKind::Setter)
         } else {
             return None;
         };

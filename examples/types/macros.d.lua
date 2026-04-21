@@ -46,6 +46,9 @@ local _CLASS_Data_ = {
 --- @field _variant string
 --- **C:** Age of variant C
 --- @field age any | integer
+--- Get the direction [Getter]
+--- Get the direction [Setter]
+--- @field direction string
 --- @field name any | string
 local _CLASS__Custom_ = {
 	--- Static field provided to Lua
