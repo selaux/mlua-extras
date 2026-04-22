@@ -21,7 +21,7 @@ use mlua::{IntoLua, MetaMethod, Value, Variadic};
 /// Represents a lua table key
 ///
 /// Table keys can be either a string or an integer
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, strum::EnumIs)]
 pub enum Index {
     Int(isize),
     Str(Cow<'static, str>),

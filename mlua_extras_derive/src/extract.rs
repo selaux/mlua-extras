@@ -202,13 +202,14 @@ impl PassBy {
 pub enum MethodKind {
     Regular,
     Meta,
+    StaticField,
     Getter,
     Setter,
 }
 impl MethodKind {
     pub fn is_field(&self) -> bool {
         match self {
-            Self::Getter | Self::Setter => true,
+            Self::Getter | Self::Setter | Self::StaticField => true,
             _ => false
         }
     }
@@ -218,6 +219,7 @@ impl MethodKind {
             || is_metamethod_attr(attr)
             || is_getter_attr(attr)
             || is_setter_attr(attr)
+            || is_field_attr(attr)
     }
 }
 
@@ -240,7 +242,7 @@ struct Method {
 }
 
 #[derive(Default, Debug, ParseAttributes)]
-#[deluxe(default, attributes(method))]
+#[deluxe(default, attributes(field))]
 struct Field {
     skip: bool,
     rename: Option<String>,
@@ -282,6 +284,12 @@ pub struct UserDataMethod {
 }
 impl UserDataMethod {
     pub fn from_impl_fn(method: &ImplItemFn) -> Option<Self> {
+        let field_attr = method
+            .attrs
+            .iter()
+            .find(|a| is_field_attr(a))
+            .map(|a| deluxe::parse_attributes::<_, Field>(a).unwrap_or_default());
+
         let method_attr = method
             .attrs
             .iter()
@@ -327,9 +335,10 @@ impl UserDataMethod {
         let matches = method_attr.as_ref().map(|_| 1).unwrap_or_default()
             + metamethod_attr.as_ref().map(|_| 1).unwrap_or_default()
             + getter_attr.as_ref().map(|_| 1).unwrap_or_default()
-            + setter_attr.as_ref().map(|_| 1).unwrap_or_default();
+            + setter_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + field_attr.as_ref().map(|_| 1).unwrap_or_default();
 
-        if matches != 1 { 
+        if matches > 1 { 
             proc_macro_error::abort!(method.sig.ident, "method cannot be registered more than once");
         }
 
@@ -341,6 +350,11 @@ impl UserDataMethod {
         let (lua_name, kind): (TokenStream, MethodKind) = if let Some(Method { rename }) = method_attr {
             let name = rename.unwrap_or_else(|| fn_name.to_string());
             (quote!(#name), MethodKind::Regular)
+        } else if let Some(Field { skip, rename }) = field_attr{
+            if skip { return None; }
+            let name = rename.unwrap_or_else(|| fn_name.to_string());
+            (quote!(#name), MethodKind::StaticField)
+            
         } else if let Some(MetaMethod(target)) = metamethod_attr {
             if (target.is_ident() && target == "Index") || (target == "__index") {
                 let replace = "__usr_index";
@@ -366,6 +380,16 @@ impl UserDataMethod {
                     method.sig.asyncness,
                     "async metamethods are not supported by mlua"
                 );
+            }
+        }
+
+        if kind.is_static_field() {
+            if !method.sig.inputs.is_empty() {
+                proc_macro_error::abort!(method.sig.inputs[0], "expeced 0 arguments");
+            }
+
+            if let ReturnType::Default = method.sig.output {
+                proc_macro_error::abort!(method.sig.span(), "expeced return type");
             }
         }
 

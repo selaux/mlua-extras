@@ -46,6 +46,7 @@ mlua = { version = "0.11.6", optional = true, default-features = false, features
 
 serde = { version = "1.0.228" }
 strum = { version = "0.27.2", features = ["derive"], default-features = false }
+ryu = "1.0.23"
 
 [[example]]
 name = "macros"

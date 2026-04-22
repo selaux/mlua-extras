@@ -132,7 +132,7 @@ fn test_declare_value() {
     ));
     assert_eq!(
         out.trim(),
-        "--- A global
+        "-- A global
 declare myGlobal: string"
     );
 }
@@ -147,8 +147,8 @@ fn test_declare_function() {
     ));
     assert_eq!(
         out.trim(),
-        "--- @param name string -- The name
---- @return string -- #1 Formatted greeting
+        "-- @param name string -- The name
+-- @return string -- #1 Formatted greeting
 declare function greet(name: string): string"
     );
 }
@@ -192,7 +192,7 @@ fn test_class_with_fields() {
     assert_eq!(
         out.trim(),
         "declare class Player
-\t--- Player name
+\t-- Player name
 \tname: string
 \tscore: number
 end"
@@ -217,7 +217,7 @@ fn test_class_with_methods() {
         "declare class Counter
 \tvalue: number
 \tfunction add(self, param1: number): ()
-\t--- Get the current value
+\t-- Get the current value
 \tfunction getValue(self): number
 end"
     );
@@ -280,7 +280,7 @@ fn test_class_with_meta_field() {
     assert_eq!(
         out.trim(),
         "declare class Tracked
-\t--- Meta field
+\t-- Meta field
 \t__count: number
 end"
     );
@@ -402,8 +402,8 @@ fn test_doc_comments() {
     ));
     assert_eq!(
         out.trim(),
-        "--- Greet someone
---- This is multiline
+        "-- Greet someone
+-- This is multiline
 declare function greet(param1: string): ()"
     );
 }
@@ -418,8 +418,8 @@ fn test_class_doc_comment() {
     let out = generate(single(def_builder));
     assert_eq!(
         out.trim(),
-        "--- Top-level doc
---- A documented class
+        "-- Top-level doc
+-- A documented class
 declare class Documented
 end"
     );
@@ -787,7 +787,7 @@ fn test_static_functions_separate_table() {
         "declare class Factory
 end
 
---- A static factory method
+-- A static factory method
 declare function Factory_create(param1: string): number
 
 declare Factory: {
@@ -842,9 +842,9 @@ fn test_integer_maps_to_number() {
     assert_eq!(
         out.trim(),
         "declare class Stats
-\t--- An integer field
+\t-- An integer field
 \tcount: number
-\t--- A float field
+\t-- A float field
 \tratio: number
 end
 

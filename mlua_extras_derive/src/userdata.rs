@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, btree_map::Entry};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 use darling::FromField;
 use proc_macro::Literal;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use syn::{Data, DeriveInput, Fields, LitInt, spanned::Spanned};
+use syn::{Data, DeriveInput, Fields, LitInt, Variant, spanned::Spanned};
 use quote::quote;
 
 use crate::{Builder, extract::{Index, UserDataEnumField, UserDataField, doc_comment}};
@@ -104,7 +104,7 @@ impl Builder {
         };
 
         if self.is_typed() {
-            let typed_impl = Self::derive_typed(&input);
+            let typed_impl = Self::derive_typed(&input, true);
 
             let doc_stmt = doc_comment(&input.attrs).map(|d| quote!(docs.add(#d);));
 
@@ -185,6 +185,134 @@ impl Builder {
                 }
             }
         }
+    }
+
+    pub fn derive_typed(input: &syn::DeriveInput, organize_fields: bool) -> TokenStream2 {
+        let name = &input.ident;
+        match &input.data {
+            Data::Struct(_) => {
+                let label = name.to_string();
+                quote!(
+                    impl mlua_extras::typed::Typed for #name {
+                        fn ty() -> mlua_extras::typed::Type {
+                            mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>().build())
+                        }
+
+                        fn as_param() -> mlua_extras::typed::Type {
+                            mlua_extras::typed::Type::named(#label)
+                        }
+
+                        fn as_return() -> mlua_extras::typed::Type {
+                            mlua_extras::typed::Type::named(#label)
+                        }
+                    }
+                )
+            },
+            Data::Enum(enum_type) => {
+                let label = name.to_string();
+                let underscore_name = format!("_{name}");
+
+                let named = enum_type.variants.iter().map(|variant| format!("{label}{}", variant.ident)).collect::<Vec<_>>();
+                let mut skipped_fields = BTreeSet::new();
+                let variants = enum_type.variants
+                    .iter()
+                    .map(|variant| { 
+                        let fields = if organize_fields {
+                            match &variant.fields {
+                                Fields::Unit => Vec::new(),
+                                Fields::Unnamed(fields) => {
+                                    fields.unnamed
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, f)| {
+                                            let idx = LitInt::new(&Literal::isize_unsuffixed(i as isize + 1).to_string(), f.span());
+                                            let ty = &f.ty;
+                                            let doc = match doc_comment(&f.attrs) {
+                                                Some(doc) => quote!(#doc),
+                                                None => quote!(())
+                                            };
+
+                                            skipped_fields.insert(Index::Int(i as isize + 1));
+
+                                            quote!(.field(#idx, <#ty as mlua_extras::typed::Typed>::ty(), #doc))
+                                        })
+                                        .collect()
+                                }
+                                Fields::Named(fields) => {
+                                    fields.named
+                                        .iter()
+                                        .map(|f| {
+                                            let idx = f.ident.as_ref().unwrap().to_string();
+                                            let ty = &f.ty;
+                                            let doc = match doc_comment(&f.attrs) {
+                                                Some(doc) => quote!(#doc),
+                                                None => quote!(())
+                                            };
+
+                                            skipped_fields.insert(Index::Str(idx.clone()));
+
+                                            quote!(.field(#idx, <#ty as mlua_extras::typed::Typed>::ty(), #doc))
+                                        })
+                                        .collect()
+                                }
+                            }
+                        } else {
+                            Vec::new()
+                        };
+
+                        let name = format!("{label}{}", variant.ident);
+                        quote!{
+                            (
+                                #name,
+                                mlua_extras::typed::Type::class(
+                                    mlua_extras::typed::TypedClassBuilder::default()
+                                        .derive(#underscore_name)
+                                        #(#fields)*
+                                        .build()
+                                )
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let skipped_fields = skipped_fields
+                    .iter()
+                    .map(|i| quote!(.skip_field(#i)));
+
+                quote!(
+                    impl mlua_extras::typed::Typed for #name {
+                        fn ty() -> mlua_extras::typed::Type {
+                            mlua_extras::typed::Type::r#union([
+                                #(mlua_extras::typed::Type::named(#named),)*
+                            ])
+                        }
+
+                        fn implicit() -> impl IntoIterator<Item=(&'static str, mlua_extras::typed::Type)> {
+                            [
+                                (
+                                    #underscore_name,
+                                    mlua_extras::typed::Type::class(
+                                        mlua_extras::typed::TypedClassBuilder::new::<Self>()
+                                            #(#skipped_fields)*
+                                            .build()
+                                    )
+                                ),
+                                #(#variants,)*
+                            ]
+                        }
+
+                        fn as_param() -> mlua_extras::typed::Type {
+                            mlua_extras::typed::Type::named(#label)
+                        }
+
+                        fn as_return() -> mlua_extras::typed::Type {
+                            mlua_extras::typed::Type::named(#label)
+                        }
+                    }
+                )
+            },
+            _ => proc_macro_error::abort!(input, "only `struct` and `enum` types are supported for Typed")
+        }.into()
     }
 
     fn derive_struct(&self, user_fields: Vec<UserDataField>) -> (Vec<TokenStream2>, Vec<TokenStream2>) {
@@ -393,81 +521,6 @@ impl Builder {
         }
 
         (field_registrations, method_registrations)
-    }
-
-    pub fn derive_typed(input: &syn::DeriveInput) -> TokenStream2 {
-        let name = &input.ident;
-        match &input.data {
-            Data::Struct(_) => {
-                let label = name.to_string();
-                quote!(
-                    impl mlua_extras::typed::Typed for #name {
-                        fn ty() -> mlua_extras::typed::Type {
-                            mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<#name>().build())
-                        }
-
-                        fn as_param() -> mlua_extras::typed::Type {
-                            mlua_extras::typed::Type::named(#label)
-                        }
-
-                        fn as_return() -> mlua_extras::typed::Type {
-                            mlua_extras::typed::Type::named(#label)
-                        }
-                    }
-                )
-            },
-            Data::Enum(enum_type) => {
-                let label = name.to_string();
-                let underscore_name = format!("_{name}");
-
-                let named = enum_type.variants.iter().map(|variant| format!("{label}{}", variant.ident)).collect::<Vec<_>>();
-                let variants = enum_type.variants
-                    .iter()
-                    .map(|variant| {
-                        let name = format!("{label}{}", variant.ident);
-                        quote!{
-                            (
-                                #name,
-                                mlua_extras::typed::Type::class(
-                                    mlua_extras::typed::TypedClassBuilder::default()
-                                        .derive(#underscore_name)
-                                        .build()
-                                )
-                            )
-                        }
-                    })
-                    .collect::<Vec<_>>();
-
-                quote!(
-                    impl mlua_extras::typed::Typed for #name {
-                        fn ty() -> mlua_extras::typed::Type {
-                            mlua_extras::typed::Type::r#union([
-                                #(mlua_extras::typed::Type::named(#named),)*
-                            ])
-                        }
-
-                        fn implicit() -> impl IntoIterator<Item=(&'static str, mlua_extras::typed::Type)> {
-                            [
-                                (
-                                    #underscore_name,
-                                    mlua_extras::typed::Type::class(mlua_extras::typed::TypedClassBuilder::new::<Self>().build())
-                                ),
-                                #(#variants,)*
-                            ]
-                        }
-
-                        fn as_param() -> mlua_extras::typed::Type {
-                            mlua_extras::typed::Type::named(#label)
-                        }
-
-                        fn as_return() -> mlua_extras::typed::Type {
-                            mlua_extras::typed::Type::named(#label)
-                        }
-                    }
-                )
-            },
-            _ => proc_macro_error::abort!(input, "only `struct` and `enum` types are supported for Typed")
-        }.into()
     }
 
     fn derive_enum(&self, enum_variants: Vec<(TokenStream2, &syn::Ident)>, user_fields: BTreeMap<Index, Vec<UserDataEnumField>>) -> (Vec<TokenStream2>, Vec<TokenStream2>) {

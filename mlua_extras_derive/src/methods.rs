@@ -345,8 +345,14 @@ impl Builder {
         });
 
         // Sync methods
-        match (&info.instance, info.kind.is_getter(), param_names.len()) {
-            (Some(PassBy::RefMut{..}|PassBy::Ref{..}), false, 1) => {
+        match (&info.instance, &info.kind, param_names.len()) {
+            (None, MethodKind::StaticField, 0) => {
+                quote! {
+                    #doc_stmt
+                    fields.add_field(#lua_name, Self::#fn_name());
+                }
+            },
+            (Some(PassBy::RefMut{..}|PassBy::Ref{..}), MethodKind::Setter, 1) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args) });
                 quote! {
                     #doc_stmt
@@ -355,7 +361,7 @@ impl Builder {
                     });
                 }
             }
-            (Some(PassBy::Ref{..}), true, 0) => {
+            (Some(PassBy::Ref{..}), MethodKind::Getter, 0) => {
                 let body = build_call_and_return(quote! { this.#fn_name(#call_args) });
                 quote! {
                     #doc_stmt
@@ -366,11 +372,12 @@ impl Builder {
             }
             // TODO: Parse the PassBy content to get better error location
             (None, _, _) => proc_macro_error::abort!(info.name, "missing 'self'"),
-            (Some(PassBy::RefMut{ mutability, ..}), true, _) => proc_macro_error::abort!(mutability, "cannot be mutable"),
-            (_, true, len) if len != 0 => proc_macro_error::abort!(info.params[0].0, "expected 0 arguments"),
-            (_, true, _) => proc_macro_error::abort!(info.name, "invalid arguments"),
-            (_, false, len) if len != 1 => proc_macro_error::abort!(info.name, "expected 1 argument"),
-            (_, false, _) => proc_macro_error::abort!(info.name, "invalid arguments")
+            (Some(PassBy::RefMut{ mutability, ..}), MethodKind::Getter, _) => proc_macro_error::abort!(mutability, "cannot be mutable"),
+            (_, MethodKind::Getter, len) if len != 0 => proc_macro_error::abort!(info.params[0].0, "expected 0 arguments"),
+            (_, MethodKind::Getter, _) => proc_macro_error::abort!(info.name, "invalid arguments"),
+            (_, MethodKind::Setter, len) if len != 1 => proc_macro_error::abort!(info.name, "expected 1 argument"),
+            (_, MethodKind::Setter, _) => proc_macro_error::abort!(info.name, "invalid arguments"),
+            _ => quote!()
         }
     }
 }

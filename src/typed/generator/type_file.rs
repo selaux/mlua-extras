@@ -144,8 +144,6 @@ impl<'writer> DefinitionWriter<'writer> {
                             if let Some(docs) = self.accumulate_docs(&[doc.as_deref()]) {
                                 writeln!(buffer, "\t{}", docs.join("\n\t"))?;
                             }
-
-                            writeln!(buffer, "\t--- @type {}", self.type_signature(ty)?)?;
                             writeln!(buffer, "\t{name} = {default},")?;
                         }
 

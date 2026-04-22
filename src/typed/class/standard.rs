@@ -119,6 +119,26 @@ impl TypedClassBuilder {
         self
     }
 
+    pub fn static_field<V>(mut self, key: impl Into<Index>, value: V, doc: impl IntoDocComment) -> Self 
+    where
+        V: Typed + IntoLua
+    {
+        let value = match value.into_lua(&self.lua) {
+            Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
+            Err(err) => Err(err)
+        };
+
+        if let Ok(value) = value {
+            self.typed_class.static_fields.insert(key.into(), StaticField::new(V::ty(), doc, value));
+        }
+        self
+    }
+
+    pub fn inherit(mut self, parent: &TypedClass) -> Self {
+        self.typed_class.static_fields.extend(parent.static_fields.clone());
+        self
+    }
+
     /// Creates a new typed function and adds it to the class's type information
     ///
     /// # Example

@@ -1,6 +1,5 @@
 use serde::ser::{
-    self, Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer,
-    Error as _
+    self, Error as _, Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer,
 };
 use std::fmt::{self, Write};
 
@@ -21,6 +20,7 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+/// Convert any type that is Serializable into it's lua value representation
 pub fn to_lua_repr<T: Serialize>(value: &T) -> Result<String, Error> {
     let mut out = String::new();
     value.serialize(&mut LuaSerializer { out: &mut out })?;
@@ -48,30 +48,83 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
         Ok(())
     }
 
-    fn serialize_i8(self, v: i8) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
-    fn serialize_i16(self, v: i16) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
-    fn serialize_i32(self, v: i32) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
-    fn serialize_i64(self, v: i64) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
+    fn serialize_i8(self, v: i8) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
+    fn serialize_i16(self, v: i16) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
+    fn serialize_i32(self, v: i32) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
+    fn serialize_i64(self, v: i64) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
 
-    fn serialize_u8(self, v: u8) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
-    fn serialize_u16(self, v: u16) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
-    fn serialize_u32(self, v: u32) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
-    fn serialize_u64(self, v: u64) -> Result<(), Error> { write!(self.out, "{v}").map_err(Error::custom) }
+    fn serialize_u8(self, v: u8) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
+    fn serialize_u16(self, v: u16) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
+    fn serialize_u32(self, v: u32) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
+    fn serialize_u64(self, v: u64) -> Result<(), Error> {
+        write!(self.out, "{v}").map_err(Error::custom)
+    }
 
     fn serialize_f32(self, v: f32) -> Result<(), Error> {
-        if v.fract() == 0.0 {
-            write!(self.out, "{v}.0").map_err(Error::custom)
+        if v.is_nan() {
+            self.out.push_str("0/0");
+        } else if v.is_infinite() {
+            if  v.is_sign_positive() {
+                self.out.push_str("math.huge");
+            } else {
+                self.out.push_str("-math.huge");
+            }
         } else {
-            write!(self.out, "{v}").map_err(Error::custom)
+            let mut buf = ryu::Buffer::new();
+            let s = buf.format_finite(v);
+
+            if s.contains('.') {
+                self.out.push_str(s);
+            } else {
+                let s = format!("{s}.0");
+                self.out.push_str(&s);
+            }
         }
+
+        Ok(())
     }
 
     fn serialize_f64(self, v: f64) -> Result<(), Error> {
-        if v.fract() == 0.0 {
-            write!(self.out, "{v}.0").map_err(Error::custom)
+        let roundedf32 = v as f32;
+        if (roundedf32 as f64) == v {
+            self.serialize_f32(roundedf32)?;
         } else {
-            write!(self.out, "{v}").map_err(Error::custom)
+            if v.is_nan() {
+                self.out.push_str("0/0");
+            } else if v.is_infinite() {
+                if  v.is_sign_positive() {
+                    self.out.push_str("math.huge");
+                } else {
+                    self.out.push_str("-math.huge");
+                }
+            } else {
+                let mut buf = ryu::Buffer::new();
+                let s = buf.format_finite(v);
+
+                if s.contains('.') {
+                    self.out.push_str(s);
+                } else {
+                    let s = format!("{s}.0");
+                    self.out.push_str(&s);
+                }
+            }
         }
+
+        Ok(())
     }
 
     fn serialize_char(self, v: char) -> Result<(), Error> {
@@ -146,8 +199,7 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
         value: &T,
     ) -> Result<(), Error> {
         self.out.push('{');
-        write!(self.out, "{} = ", lua_ident_or_bracket(variant))
-            .map_err(Error::custom)?;
+        write!(self.out, "{} = ", lua_ident_or_bracket(variant)).map_err(Error::custom)?;
         value.serialize(&mut *self)?;
         self.out.push('}');
         Ok(())
@@ -155,7 +207,11 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Error> {
         self.out.push('{');
-        Ok(LuaSeq { ser: self, first: true, closes_twice: false })
+        Ok(LuaSeq {
+            ser: self,
+            first: true,
+            closes_twice: false,
+        })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Error> {
@@ -178,15 +234,22 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Error> {
         self.out.push('{');
-        write!(self.out, "{} = ", lua_ident_or_bracket(variant))
-            .map_err(Error::custom)?;
+        write!(self.out, "{} = ", lua_ident_or_bracket(variant)).map_err(Error::custom)?;
         self.out.push('{');
-        Ok(LuaSeq { ser: self, first: true, closes_twice: true })
+        Ok(LuaSeq {
+            ser: self,
+            first: true,
+            closes_twice: true,
+        })
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Error> {
         self.out.push('{');
-        Ok(LuaMap { ser: self, first: true, closes_twice: false })
+        Ok(LuaMap {
+            ser: self,
+            first: true,
+            closes_twice: false,
+        })
     }
 
     fn serialize_struct(
@@ -205,9 +268,12 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Error> {
         self.out.push('{');
-        write!(self.out, "{} = {{", lua_ident_or_bracket(variant))
-            .map_err(Error::custom)?;
-        Ok(LuaMap { ser: self, first: true, closes_twice: true })
+        write!(self.out, "{} = {{", lua_ident_or_bracket(variant)).map_err(Error::custom)?;
+        Ok(LuaMap {
+            ser: self,
+            first: true,
+            closes_twice: true,
+        })
     }
 }
 
@@ -250,7 +316,9 @@ impl<'a, 'b> ser::SerializeTuple for LuaSeq<'a, 'b> {
     fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Error> {
         SerializeSeq::serialize_element(self, value)
     }
-    fn end(self) -> Result<(), Error> { SerializeSeq::end(self) }
+    fn end(self) -> Result<(), Error> {
+        SerializeSeq::end(self)
+    }
 }
 
 impl<'a, 'b> ser::SerializeTupleStruct for LuaSeq<'a, 'b> {
@@ -259,7 +327,9 @@ impl<'a, 'b> ser::SerializeTupleStruct for LuaSeq<'a, 'b> {
     fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Error> {
         SerializeSeq::serialize_element(self, value)
     }
-    fn end(self) -> Result<(), Error> { SerializeSeq::end(self) }
+    fn end(self) -> Result<(), Error> {
+        SerializeSeq::end(self)
+    }
 }
 
 impl<'a, 'b> ser::SerializeTupleVariant for LuaSeq<'a, 'b> {
@@ -268,7 +338,9 @@ impl<'a, 'b> ser::SerializeTupleVariant for LuaSeq<'a, 'b> {
     fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Error> {
         SerializeSeq::serialize_element(self, value)
     }
-    fn end(self) -> Result<(), Error> { SerializeSeq::end(self) }
+    fn end(self) -> Result<(), Error> {
+        SerializeSeq::end(self)
+    }
 }
 
 struct LuaMap<'a, 'b> {
@@ -392,12 +464,24 @@ impl<'a> Serializer for KeySerializer<'a> {
         value.serialize(self)
     }
 
-    fn serialize_i8(self, v: i8) -> Result<(), Error> { self.serialize_i64(v as i64) }
-    fn serialize_i16(self, v: i16) -> Result<(), Error> { self.serialize_i64(v as i64) }
-    fn serialize_i32(self, v: i32) -> Result<(), Error> { self.serialize_i64(v as i64) }
-    fn serialize_u8(self, v: u8) -> Result<(), Error> { self.serialize_u64(v as u64) }
-    fn serialize_u16(self, v: u16) -> Result<(), Error> { self.serialize_u64(v as u64) }
-    fn serialize_u32(self, v: u32) -> Result<(), Error> { self.serialize_u64(v as u64) }
+    fn serialize_i8(self, v: i8) -> Result<(), Error> {
+        self.serialize_i64(v as i64)
+    }
+    fn serialize_i16(self, v: i16) -> Result<(), Error> {
+        self.serialize_i64(v as i64)
+    }
+    fn serialize_i32(self, v: i32) -> Result<(), Error> {
+        self.serialize_i64(v as i64)
+    }
+    fn serialize_u8(self, v: u8) -> Result<(), Error> {
+        self.serialize_u64(v as u64)
+    }
+    fn serialize_u16(self, v: u16) -> Result<(), Error> {
+        self.serialize_u64(v as u64)
+    }
+    fn serialize_u32(self, v: u32) -> Result<(), Error> {
+        self.serialize_u64(v as u64)
+    }
 
     fn serialize_f32(self, _v: f32) -> Result<(), Error> {
         Err(Error::custom("float keys not supported"))
@@ -411,23 +495,70 @@ impl<'a> Serializer for KeySerializer<'a> {
     fn serialize_bytes(self, _v: &[u8]) -> Result<(), Error> {
         Err(Error::custom("bytes keys not supported"))
     }
-    fn serialize_unit_struct(self, _: &'static str) -> Result<(), Error> { self.serialize_unit() }
-    fn serialize_unit_variant(self, _: &'static str, _: u32, variant: &'static str) -> Result<(), Error> {
+    fn serialize_unit_struct(self, _: &'static str) -> Result<(), Error> {
+        self.serialize_unit()
+    }
+    fn serialize_unit_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        variant: &'static str,
+    ) -> Result<(), Error> {
         self.serialize_str(variant)
     }
-    fn serialize_newtype_struct<T: ?Sized + Serialize>(self, _: &'static str, value: &T) -> Result<(), Error> {
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(
+        self,
+        _: &'static str,
+        value: &T,
+    ) -> Result<(), Error> {
         value.serialize(self)
     }
-    fn serialize_newtype_variant<T: ?Sized + Serialize>(self, _: &'static str, _: u32, _: &'static str, _: &T) -> Result<(), Error> {
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: &T,
+    ) -> Result<(), Error> {
         Err(Error::custom("complex keys not supported"))
     }
-    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Error> { Err(Error::custom("complex keys not supported")) }
-    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Error> { Err(Error::custom("complex keys not supported")) }
-    fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeTupleStruct, Error> { Err(Error::custom("complex keys not supported")) }
-    fn serialize_tuple_variant(self, _: &'static str, _: u32, _: &'static str, _: usize) -> Result<Self::SerializeTupleVariant, Error> { Err(Error::custom("complex keys not supported")) }
-    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Error> { Err(Error::custom("complex keys not supported")) }
-    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Error> { Err(Error::custom("complex keys not supported")) }
-    fn serialize_struct_variant(self, _: &'static str, _: u32, _: &'static str, _: usize) -> Result<Self::SerializeStructVariant, Error> { Err(Error::custom("complex keys not supported")) }
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
+    fn serialize_tuple_struct(
+        self,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleStruct, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
+    fn serialize_tuple_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleVariant, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
+    fn serialize_struct_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeStructVariant, Error> {
+        Err(Error::custom("complex keys not supported"))
+    }
 }
 
 fn lua_ident_or_bracket(s: &str) -> &str {
@@ -459,9 +590,9 @@ mod test {
     use super::*;
 
     /// Expect {type} with {value} to serialize to {expected}
-    /// 
+    ///
     /// `expect!(type, &value, expected)`
-    /// 
+    ///
     /// ```
     /// exptect!(u8, &3, "3");
     /// ```
@@ -500,8 +631,12 @@ mod test {
         expect!(Option<bool>, &Some(true), "true");
         expect!(&[u8], &b"test".as_slice(), "{116, 101, 115, 116}");
         expect!(BTreeMap<&str, bool>, &BTreeMap::from([("test", false), ("test2", true)]), "{test = false, test2 = true}");
-        expect!(Vec<&str>, &Vec::from(["test", "test2"]), "{\"test\", \"test2\"}");
-    } 
+        expect!(
+            Vec<&str>,
+            &Vec::from(["test", "test2"]),
+            "{\"test\", \"test2\"}"
+        );
+    }
 
     #[derive(Serialize)]
     struct Person {
@@ -511,6 +646,13 @@ mod test {
 
     #[test]
     fn test_rust_custom_types() {
-        expect!(Person, &Person{ name: "Test".into(), age: 10 }, "{name = \"Test\", age = 10}");
+        expect!(
+            Person,
+            &Person {
+                name: "Test".into(),
+                age: 10
+            },
+            "{name = \"Test\", age = 10}"
+        );
     }
 }

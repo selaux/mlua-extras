@@ -1,13 +1,19 @@
 use std::path::PathBuf;
 
-use mlua::{IntoLua, FromLua, Lua, StdLib};
-use mlua_extras::{TypedUserData, UserData, typed::generator::{Definition, DefinitionFileGenerator, Definitions}, typed_user_data_impl, user_data_impl};
+use mlua::{FromLua, IntoLua, Lua};
+use mlua_extras::{
+    TypedUserData,
+    typed::generator::{
+        Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator,
+    },
+    typed_user_data_impl,
+};
 
 /// Structured Data
 #[derive(Clone, TypedUserData)]
 struct Data {
     /// Name of the data source
-    name: String
+    name: String,
 }
 
 #[typed_user_data_impl]
@@ -18,7 +24,7 @@ impl Data {
     }
 
     /// This method is called last.
-    /// 
+    ///
     /// use `#[field(skip)]` for fields that are assigned to the index
     /// to allow for them to overridden in this impl
     #[metamethod(Index)]
@@ -26,12 +32,12 @@ impl Data {
         match idx {
             -1 => "TESTING".into_lua(lua),
             1 => self.name.clone().into_lua(lua),
-            _ => Ok(mlua::Value::Nil)
+            _ => Ok(mlua::Value::Nil),
         }
     }
-    
+
     /// This method is called last.
-    /// 
+    ///
     /// use `#[field(skip)]` for fields that are assigned to the index
     /// to allow for them to overridden in this impl
     #[metamethod(NewIndex)]
@@ -41,7 +47,7 @@ impl Data {
             // It is recommended to return some sort of error from this implementation.
             //
             // This enforces strict indexing into userdata types.
-            _ => return Err(mlua::Error::runtime(format!("invalid index '{idx}'")))
+            _ => return Err(mlua::Error::runtime(format!("invalid index '{idx}'"))),
         }
         Ok(())
     }
@@ -53,7 +59,7 @@ enum Custom {
     A,
     B(
         /// Variant B Data
-        String
+        String,
     ),
     C {
         name: String,
@@ -62,7 +68,7 @@ enum Custom {
     },
     D(
         /// Variant D Data
-        u32
+        u32,
     ),
 }
 
@@ -70,6 +76,23 @@ enum Custom {
 impl Custom {
     /// Static field provided to Lua
     const COUNT: usize = 10;
+
+    /// Static field fetched from calling this
+    /// function once
+    #[field(rename = "PI")]
+    fn pi() -> f32 {
+        3.14
+    }
+
+    #[field(rename = "INF")]
+    fn inf() -> f32 {
+        f32::INFINITY
+    }
+
+    #[field(rename = "NAN")]
+    fn nan() -> f32 {
+        f32::NAN
+    }
 
     /// Get the direction [Getter]
     #[getter("direction")]
@@ -85,12 +108,12 @@ impl Custom {
 
     /// Get the message based on the variant
     #[method]
-    fn message(&self, input: String) -> String {
+    fn message(&self) -> String {
         match self {
             Self::A => "Hello, world!".into(),
             Self::B(msg) => msg.clone(),
-            Self::C{ name, age } => format!("{name} age {age}"),
-            Self::D(count) => count.to_string()
+            Self::C { name, age } => format!("{name} age {age}"),
+            Self::D(count) => count.to_string(),
         }
     }
 }
@@ -98,27 +121,37 @@ impl Custom {
 fn main() -> mlua::Result<()> {
     let lua = Lua::new();
 
-    lua.globals().set("data", Data { name: "MluaExtras".into() })?;
-    lua.globals().set("kind", Custom::A)?;
+    lua.globals().set(
+        "data",
+        Data {
+            name: "MluaExtras".into(),
+        },
+    )?;
+    lua.globals().set("custom", Custom::A)?;
 
-    lua.load("
+    lua.load(
+        "
     print('Index [1]:', data[1])
     data[1] = 'HelloWorld'
     print('Set data[1] to \\'HelloWorld\\'')
     print('Get Data:', data:get_data())
     print('Index [-1]:', data[-1])
-    print('Kind:', kind._variant, kind:message())
+    print('Custom:', custom._variant, custom:message())
 
-    local ok, value = pcall(function () return kind[1] end)
-    print('Kind [1]: OK', ok, tostring(value):match('(.-)\\n') or tostring(value))
-    ").exec()?;
+    print('Custom Count:', custom.COUNT)
+
+    local ok, value = pcall(function () return custom[1] end)
+    print('Custom [1]: OK', ok, tostring(value):match('(.-)\\n') or tostring(value))
+    ",
+    )
+    .exec()?;
 
     let definitions: Definitions = Definitions::start()
         .define(
             "macros",
             Definition::start()
                 .register::<Data>("Data")
-                .register::<Custom>("Kind")
+                .register::<Custom>("Custom"),
         )
         .finish();
 
@@ -129,6 +162,12 @@ fn main() -> mlua::Result<()> {
 
     let dfg = DefinitionFileGenerator::new(definitions.clone());
     for (name, writer) in dfg.iter() {
+        println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        writer.write_file(types_path.join(name)).unwrap();
+    }
+
+    let luau_gen = LuauDefinitionFileGenerator::new(definitions);
+    for (name, writer) in luau_gen.iter() {
         println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
         writer.write_file(types_path.join(name)).unwrap();
     }

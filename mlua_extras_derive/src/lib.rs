@@ -153,7 +153,7 @@ pub fn user_data_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Typed)]
 pub fn derive_typed(input: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(input as syn::DeriveInput);
-    Builder::derive_typed(&item).into()
+    Builder::derive_typed(&item, false).into()
 }
 
 /// Derive macro that generates a `TypedUserData` implementation from struct fields.

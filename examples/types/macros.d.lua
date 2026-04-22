@@ -39,23 +39,20 @@ local _CLASS_Data_ = {
 
 --- Kind of action
 --- @class _Custom
---- **B:** Variant B Data
---- **D:** Variant D Data
---- @field [1] string | integer
 --- Current variant name
 --- @field _variant string
---- **C:** Age of variant C
---- @field age any | integer
 --- Get the direction [Getter]
 --- Get the direction [Setter]
 --- @field direction string
---- @field name any | string
 local _CLASS__Custom_ = {
 	--- Static field provided to Lua
-	--- @type integer
 	COUNT = 10,
+	INF = math.huge,
+	NAN = 0/0,
+	--- Static field fetched from calling this
+	--- function once
+	PI = 3.14,
 	--- Full list of variant name
-	--- @type string[]
 	_variants = {"A", "B", "C", "D"},
 	--- Get the message based on the variant
 	--- @param self _Custom
@@ -77,10 +74,17 @@ local _CLASS__Custom_ = {
 --- @class CustomA: _Custom
 
 --- @class CustomB: _Custom
+--- Variant B Data
+--- @field [1] string
 
 --- @class CustomC: _Custom
+--- Age of variant C
+--- @field age integer
+--- @field name string
 
 --- @class CustomD: _Custom
+--- Variant D Data
+--- @field [1] integer
 
---- @alias Kind CustomA | CustomB | CustomC | CustomD
+--- @alias Custom CustomA | CustomB | CustomC | CustomD
 
