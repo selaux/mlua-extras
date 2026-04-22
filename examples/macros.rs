@@ -85,7 +85,7 @@ impl Custom {
 
     /// Get the message based on the variant
     #[method]
-    fn message(&self) -> String {
+    fn message(&self, input: String) -> String {
         match self {
             Self::A => "Hello, world!".into(),
             Self::B(msg) => msg.clone(),

@@ -125,17 +125,39 @@ pub struct UserDataEnumField {
 
 #[derive(Debug)]
 pub enum PassBy {
-    Ref,
-    RefMut,
+    Ref {
+        #[allow(unused)]
+        and: syn::token::And,
+        #[allow(unused)]
+        name: syn::Ident
+    },
+    RefMut {
+        #[allow(unused)]
+        and: syn::token::And,
+        mutability: syn::token::Mut,
+        #[allow(unused)]
+        name: syn::Ident
+    },
 }
 impl PassBy {
     fn from_fn_arg(value: Option<&FnArg>) -> Option<Self> {
         match value {
             Some(FnArg::Receiver(recv)) => {
-                if recv.reference.is_some() && recv.mutability.is_some() {
-                    Some(PassBy::RefMut)
+                if let Some((and, _lifetime)) = &recv.reference {
+                    if let Some(mutability) = recv.mutability {
+                        Some(PassBy::RefMut {
+                            and: and.clone(),
+                            mutability,
+                            name: syn::Ident::new("self", recv.self_token.span())
+                        })
+                    } else {
+                        Some(PassBy::Ref {
+                            and: and.clone(),
+                            name: syn::Ident::new("self", recv.self_token.span())
+                        })
+                    }
                 } else {
-                    Some(PassBy::Ref)
+                    proc_macro_error::abort!(recv.self_token, "must be a reference");
                 }
             }
             Some(FnArg::Typed(typed)) => {
@@ -147,10 +169,22 @@ impl PassBy {
                 }) = &*typed.pat
                 {
                     if ident == "self" {
-                        if by_ref.is_some() && mutability.is_some() {
-                            Some(PassBy::RefMut)
+                        if by_ref.is_some() {
+                            let and = syn::token::And(typed.ty.span());
+                            if let Some(mutability) = mutability {
+                                Some(PassBy::RefMut {
+                                    and,
+                                    mutability: *mutability,
+                                    name: ident.clone(),
+                                })
+                            } else {
+                                Some(PassBy::Ref {
+                                    and,
+                                    name: ident.clone(),
+                                })
+                            }
                         } else {
-                            Some(PassBy::Ref)
+                            proc_macro_error::abort!(ident, "must be a reference");
                         }
                     } else {
                         None
@@ -295,7 +329,9 @@ impl UserDataMethod {
             + getter_attr.as_ref().map(|_| 1).unwrap_or_default()
             + setter_attr.as_ref().map(|_| 1).unwrap_or_default();
 
-        if matches != 1 { return None; }
+        if matches != 1 { 
+            proc_macro_error::abort!(method.sig.ident, "method cannot be registered more than once");
+        }
 
         let fn_name = method.sig.ident.clone();
         let is_async = method.sig.asyncness.is_some();
@@ -358,6 +394,14 @@ impl UserDataMethod {
         if let Some(FnArg::Typed(pat_type)) = params_iter.peek() {
             if let Pat::Ident(PatIdent { ident, .. }) = &*pat_type.pat {
                 if ident == "lua" {
+                    // Validate whether Lua is passed by reference or not based on if the
+                    // method is registered as async. In mlua `async` method/function variants
+                    // pass `Lua` by value while all other methods/functions are pass by reference.
+                    match &*pat_type.ty {
+                        syn::Type::Reference(_) => if is_async { proc_macro_error::abort!(pat_type.ty, "cannot be a reference") },
+                        _  if !is_async => proc_macro_error::abort!(pat_type.ty, "must be a reference"),
+                        _ => ()
+                    }
                     has_lua = true;
                     params_iter.next();
                 }

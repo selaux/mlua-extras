@@ -32,7 +32,6 @@ send = ["mlua/send"]
 error-send = ["mlua/error-send"]
 macros = ["mlua/macros", "dep:mlua-extras-derive"]
 anyhow = ["mlua/anyhow"]
-serde = ["mlua/serde"]
 userdata-wrappers = ["mlua/userdata-wrappers"]
 
 [dev-dependencies]

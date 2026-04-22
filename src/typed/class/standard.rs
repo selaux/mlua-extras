@@ -584,12 +584,12 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         self
     }
 
-    fn index<I: Typed>(&mut self, idx: usize, doc: impl IntoDocComment) -> &mut Self {
+    fn index<I: Typed>(&mut self, idx: isize, doc: impl IntoDocComment) -> &mut Self {
         self.typed_class.fields.insert(idx.into(), Field { ty: I::as_param(), doc: doc.into_doc_comment() });
         self
     }
 
-    fn index_as(&mut self, idx: usize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
+    fn index_as(&mut self, idx: isize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
         self.typed_class.fields.insert(idx.into(), Field { ty: ty.into(), doc: doc.into_doc_comment() });
         self
     }

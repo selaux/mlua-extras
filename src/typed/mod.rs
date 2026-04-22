@@ -23,7 +23,7 @@ use mlua::{IntoLua, MetaMethod, Value, Variadic};
 /// Table keys can be either a string or an integer
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum Index {
-    Int(usize),
+    Int(isize),
     Str(Cow<'static, str>),
 }
 
@@ -75,8 +75,8 @@ impl From<String> for Index {
     }
 }
 
-impl From<usize> for Index {
-    fn from(value: usize) -> Self {
+impl From<isize> for Index {
+    fn from(value: isize) -> Self {
         Self::Int(value)
     }
 }

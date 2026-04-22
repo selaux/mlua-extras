@@ -4,10 +4,12 @@ extern crate quote;
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 
+use crate::builder::Builder;
+
 mod methods;
 mod userdata;
 pub(crate) mod extract;
-mod typed;
+pub(crate) mod builder;
 
 /// Generates a [mlua::UserData] implementation from struct fields.
 /// 
@@ -60,7 +62,7 @@ mod typed;
 #[proc_macro_derive(UserData, attributes(field))]
 pub fn derive_user_data(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    userdata::derive(input).into()
+    Builder::regular().derive_fields(input).into()
 }
 
 /// Attribute macro that registers methods from an `impl` block for use in Lua.
@@ -128,7 +130,7 @@ pub fn derive_user_data(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn user_data_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(item as syn::ItemImpl);
-    methods::derive(item).into()
+    Builder::regular().derive_methods(item).into()
 }
 
 /// Generates a [`Typed`](mlua_extras::Typed) implementation from fields.
@@ -151,7 +153,7 @@ pub fn user_data_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Typed)]
 pub fn derive_typed(input: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(input as syn::DeriveInput);
-    typed::derive(item).into()
+    Builder::derive_typed(&item).into()
 }
 
 /// Derive macro that generates a `TypedUserData` implementation from struct fields.
@@ -189,10 +191,10 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
 /// Optionally combine with [`macro@typed_user_data_impl`] to also register methods.
 /// See `tests/lua_user_data.rs` for more exhaustive examples.
 #[proc_macro_error]
-#[proc_macro_derive(TypedUserData, attributes(mlua_extras))]
+#[proc_macro_derive(TypedUserData, attributes(field))]
 pub fn derive_typed_user_data(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    typed::user_data::derive(input).into()
+    Builder::typed().derive_fields(input).into()
 }
 
 // /// Attribute macro that registers methods from an `impl` block for use in Lua.
@@ -266,5 +268,5 @@ pub fn derive_typed_user_data(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn typed_user_data_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(item as syn::ItemImpl);
-    typed::methods::derive(item).into()
+    Builder::typed().derive_methods(item).into()
 }

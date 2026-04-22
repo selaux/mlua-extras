@@ -158,10 +158,10 @@ pub trait TypedDataMethods<T> {
     fn ret_as(&mut self, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self;
 
     /// Adds an index field with a type and doc comment to the class definition
-    fn index<I: Typed>(&mut self, idx: usize, doc: impl IntoDocComment) -> &mut Self;
+    fn index<I: Typed>(&mut self, idx: isize, doc: impl IntoDocComment) -> &mut Self;
 
     /// Adds an index field with a type and doc comment to the class definition
-    fn index_as(&mut self, idx: usize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self;
+    fn index_as(&mut self, idx: isize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self;
 }
 
 /// Typed variant of [`mlua::UserDataFields`]

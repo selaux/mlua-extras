@@ -2,15 +2,15 @@
 
 use mlua::{AnyUserData, FromLua};
 use mlua_extras::{
-    UserData,
+    TypedUserData,
     mlua::{self, Lua, Value},
-    user_data_impl,
+    typed_user_data_impl,
 };
 
 // Test 1: Feild attribute parsing
 
 #[allow(dead_code)]
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct TestNamedFields {
     normal: String,
     #[field(skip)]
@@ -88,7 +88,7 @@ fn test_named_field_registration() {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct TestIndexedFields(
     String,
     #[field(skip)] bool,
@@ -161,12 +161,12 @@ fn test_indexed_field_registration() {
 
 // Test 2: Methods with rename
 
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct Calculator {
     value: f64,
 }
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl Calculator {
     #[method]
     fn add(&self, x: f64) -> f64 {
@@ -222,12 +222,12 @@ fn test_method_registration() {
 
 // Test 3: Metamethods
 
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct Stringable {
     value: String,
 }
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl Stringable {
     #[metamethod(ToString)]
     fn to_string_repr(&self) -> String {
@@ -285,12 +285,12 @@ fn test_metamethods() {
 
 // Test 4: Mutable Methods
 
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct MutCalc {
     value: f64,
 }
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl MutCalc {
     #[method]
     fn set_value(&mut self, x: f64) {
@@ -310,10 +310,10 @@ fn test_mut_method() {
 
 // Test 5: Optional lua parameter
 
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct LuaAccess;
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl LuaAccess {
     #[method]
     fn create_table(&self, lua: &Lua) -> mlua::Result<mlua::Table> {
@@ -338,10 +338,10 @@ fn test_optional_lua_param() {
 
 // Test 6: Static functions (no self)
 
-#[derive(Clone, UserData)]
+#[derive(Clone, TypedUserData)]
 struct MathUtils;
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl MathUtils {
     #[method]
     fn add(a: f64, b: f64) -> f64 {
@@ -368,7 +368,7 @@ fn test_static_functions() {
 
 // Test 7: Static meta functions (no self)
 
-#[derive(Debug, Clone, UserData, PartialEq)]
+#[derive(Debug, Clone, TypedUserData, PartialEq)]
 struct Vec2(f64, f64);
 impl FromLua for Vec2 {
     fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
@@ -394,7 +394,7 @@ impl FromLua for Vec2 {
     }
 }
 
-#[user_data_impl]
+#[typed_user_data_impl]
 impl Vec2 {
     #[metamethod(Add)]
     fn add(a: Self, b: Self) -> Self {
@@ -445,12 +445,12 @@ fn test_static_meta_functions() {
 mod async_tests {
     use super::*;
 
-    #[derive(Clone, UserData)]
+    #[derive(Clone, TypedUserData)]
     struct AsyncWorker {
         prefix: String,
     }
 
-    #[user_data_impl]
+    #[typed_user_data_impl]
     impl AsyncWorker {
         #[method]
         async fn process(&self, input: String) -> mlua::Result<String> {
