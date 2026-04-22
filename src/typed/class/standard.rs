@@ -48,7 +48,7 @@ pub struct TypedClassBuilder {
     queued_params: Vec<(Option<Type>, String, Option<Cow<'static, str>>)>,
     queued_returns: Vec<(Option<Type>, Option<Cow<'static, str>>)>,
 
-    typed_class: TypedClass,
+    pub typed_class: TypedClass,
 }
 
 impl From<TypedClassBuilder> for Type {

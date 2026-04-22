@@ -2,9 +2,9 @@
 #![cfg(feature = "luau")]
 
 use crate::typed::{
-    generator::{Definition, DefinitionBuilder, Definitions, Entry, LuauDefinitionFileGenerator},
-    function::Return,
     Field, Func, Index, Param, Type, TypedClassBuilder,
+    function::Return,
+    generator::{Definition, DefinitionBuilder, Definitions, Entry, LuauDefinitionFileGenerator},
 };
 
 /// Write definitions to a string buffer and return the output.
@@ -23,8 +23,15 @@ fn single(def: DefinitionBuilder) -> Definitions {
 }
 
 /// Helper: add a typed value entry to a DefinitionBuilder.
-fn with_value(mut builder: DefinitionBuilder, name: &str, ty: Type, doc: Option<&str>) -> DefinitionBuilder {
-    builder.entries.push(Entry::new_with(name, Type::Value(Box::new(ty)), doc));
+fn with_value(
+    mut builder: DefinitionBuilder,
+    name: &str,
+    ty: Type,
+    doc: Option<&str>,
+) -> DefinitionBuilder {
+    builder
+        .entries
+        .push(Entry::new_with(name, Type::Value(Box::new(ty)), doc));
     builder
 }
 
@@ -95,17 +102,15 @@ fn validate_with_luau_lsp(defs_content: &str, script: &str) {
 
 #[test]
 fn test_enum_type() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Direction",
-            Type::r#enum([
-                Type::literal("Up"),
-                Type::literal("Down"),
-                Type::literal("Left"),
-                Type::literal("Right"),
-            ]),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Direction",
+        Type::r#enum([
+            Type::literal("Up"),
+            Type::literal("Down"),
+            Type::literal("Left"),
+            Type::literal("Right"),
+        ]),
+    )));
     assert_eq!(
         out.trim(),
         r#"export type Direction = "Up" | "Down" | "Left" | "Right""#
@@ -122,14 +127,12 @@ fn test_alias_type() {
 
 #[test]
 fn test_declare_value() {
-    let out = generate(single(
-        with_value(
-            Definition::start(),
-            "myGlobal",
-            Type::string(),
-            Some("A global"),
-        ),
-    ));
+    let out = generate(single(with_value(
+        Definition::start(),
+        "myGlobal",
+        Type::string(),
+        Some("A global"),
+    )));
     assert_eq!(
         out.trim(),
         "-- A global
@@ -156,20 +159,15 @@ declare function greet(name: string): string"
 #[test]
 fn test_function_no_return() {
     let out = generate(single(
-        Definition::start()
-            .function::<(String,), ()>("log", ()),
+        Definition::start().function::<(String,), ()>("log", ()),
     ));
-    assert_eq!(
-        out.trim(),
-        "declare function log(param1: string): ()"
-    );
+    assert_eq!(out.trim(), "declare function log(param1: string): ()");
 }
 
 #[test]
 fn test_function_multi_return() {
     let out = generate(single(
-        Definition::start()
-            .function::<String, (bool, String)>("parse", ()),
+        Definition::start().function::<String, (bool, String)>("parse", ()),
     ));
     assert_eq!(
         out.trim(),
@@ -185,7 +183,8 @@ fn test_class_with_fields() {
             Type::class(
                 TypedClassBuilder::default()
                     .field("name", Type::string(), "Player name")
-                    .field("score", Type::integer(), ()),
+                    .field("score", Type::integer(), ())
+                    .build(),
             ),
         ),
     ));
@@ -208,7 +207,8 @@ fn test_class_with_methods() {
                 TypedClassBuilder::default()
                     .field("value", Type::integer(), ())
                     .method::<(), i64>("getValue", "Get the current value")
-                    .method::<(i64,), ()>("add", ()),
+                    .method::<(i64,), ()>("add", ())
+                    .build(),
             ),
         ),
     ));
@@ -230,7 +230,8 @@ fn test_class_with_functions_separate_table() {
             "Utils",
             Type::class(
                 TypedClassBuilder::default()
-                    .function::<String, String>("upper", ()),
+                    .function::<String, String>("upper", ())
+                    .build(),
             ),
         ),
     ));
@@ -256,7 +257,8 @@ fn test_class_with_meta_method() {
             Type::class(
                 TypedClassBuilder::default()
                     .field("x", Type::number(), ())
-                    .meta_method::<(), String>("__tostring", ()),
+                    .meta_method::<(), String>("__tostring", ())
+                    .build(),
             ),
         ),
     ));
@@ -272,11 +274,13 @@ end"
 #[test]
 fn test_class_with_meta_field() {
     let mut builder = TypedClassBuilder::default();
-    builder.meta_fields.insert(
+    builder.typed_class.meta_fields.insert(
         Index::from("__count"),
         Field::new(Type::integer(), "Meta field"),
     );
-    let out = generate(single(Definition::start().register_as("Tracked", Type::class(builder))));
+    let out = generate(single(
+        Definition::start().register_as("Tracked", Type::class(builder.build())),
+    ));
     assert_eq!(
         out.trim(),
         "declare class Tracked
@@ -289,8 +293,7 @@ end"
 #[test]
 fn test_optional_type_sugar() {
     let out = generate(single(
-        Definition::start()
-            .register_as("MaybeStr", Type::string() | Type::nil()),
+        Definition::start().register_as("MaybeStr", Type::string() | Type::nil()),
     ));
     assert_eq!(out.trim(), "export type MaybeStr = string?");
 }
@@ -298,8 +301,7 @@ fn test_optional_type_sugar() {
 #[test]
 fn test_array_type() {
     let out = generate(single(
-        Definition::start()
-            .register_as("Names", Type::array(Type::string())),
+        Definition::start().register_as("Names", Type::array(Type::string())),
     ));
     assert_eq!(out.trim(), "export type Names = { string }");
 }
@@ -307,25 +309,20 @@ fn test_array_type() {
 #[test]
 fn test_map_type() {
     let out = generate(single(
-        Definition::start().register_as(
-            "Scores",
-            Type::map(Type::string(), Type::integer()),
-        ),
+        Definition::start().register_as("Scores", Type::map(Type::string(), Type::integer())),
     ));
     assert_eq!(out.trim(), "export type Scores = { [string]: number }");
 }
 
 #[test]
 fn test_table_type() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Config",
-            Type::table([
-                (Index::from("host"), Type::string()),
-                (Index::from("port"), Type::integer()),
-            ]),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Config",
+        Type::table([
+            (Index::from("host"), Type::string()),
+            (Index::from("port"), Type::integer()),
+        ]),
+    )));
     assert_eq!(
         out.trim(),
         "export type Config = { host: string, port: number }"
@@ -348,31 +345,23 @@ fn test_function_type_signature() {
     let out = generate(single(
         Definition::start().register_as("Predicate", func_type),
     ));
-    assert_eq!(
-        out.trim(),
-        "export type Predicate = (x: number) -> boolean"
-    );
+    assert_eq!(out.trim(), "export type Predicate = (x: number) -> boolean");
 }
 
 #[test]
 fn test_tuple_homogeneous() {
     let out = generate(single(
-        Definition::start().register_as(
-            "Pair",
-            Type::tuple([Type::integer(), Type::integer()]),
-        ),
+        Definition::start().register_as("Pair", Type::tuple([Type::integer(), Type::integer()])),
     ));
     assert_eq!(out.trim(), "export type Pair = { number }");
 }
 
 #[test]
 fn test_tuple_heterogeneous() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Mixed",
-            Type::tuple([Type::string(), Type::integer(), Type::boolean()]),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Mixed",
+        Type::tuple([Type::string(), Type::integer(), Type::boolean()]),
+    )));
     assert_eq!(
         out.trim(),
         "export type Mixed = { string | number | boolean }"
@@ -382,15 +371,10 @@ fn test_tuple_heterogeneous() {
 #[test]
 fn test_union_type() {
     let out = generate(single(
-        Definition::start().register_as(
-            "Multi",
-            Type::string() | Type::integer() | Type::boolean(),
-        ),
+        Definition::start()
+            .register_as("Multi", Type::string() | Type::integer() | Type::boolean()),
     ));
-    assert_eq!(
-        out.trim(),
-        "export type Multi = string | number | boolean"
-    );
+    assert_eq!(out.trim(), "export type Multi = string | number | boolean");
 }
 
 #[test]
@@ -411,10 +395,14 @@ declare function greet(param1: string): ()"
 #[test]
 fn test_class_doc_comment() {
     let mut builder = TypedClassBuilder::default();
-    builder.type_doc = Some("A documented class".into());
+    builder.typed_class.type_doc = Some("A documented class".into());
     // register_as uses Entry::new (no doc), so set doc on the entry directly
     let mut def_builder = Definition::start();
-    def_builder.entries.push(Entry::new_with("Documented", Type::class(builder), Some("Top-level doc")));
+    def_builder.entries.push(Entry::new_with(
+        "Documented",
+        Type::class(builder.build()),
+        Some("Top-level doc"),
+    ));
     let out = generate(single(def_builder));
     assert_eq!(
         out.trim(),
@@ -432,14 +420,12 @@ fn test_enum_referenced_in_value() {
         Type::literal("Green"),
         Type::literal("Blue"),
     ]);
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as("Color", color_enum),
-            "defaultColor",
-            Type::named("Color"),
-            None,
-        ),
-    ));
+    let out = generate(single(with_value(
+        Definition::start().register_as("Color", color_enum),
+        "defaultColor",
+        Type::named("Color"),
+        None,
+    )));
     assert_eq!(
         out.trim(),
         "export type Color = \"Red\" | \"Green\" | \"Blue\"
@@ -474,20 +460,15 @@ fn test_extension_custom() {
 
 #[test]
 fn test_luau_lsp_enum_and_value() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Direction",
-                Type::r#enum([
-                    Type::literal("Up"),
-                    Type::literal("Down"),
-                ]),
-            ),
-            "dir",
-            Type::named("Direction"),
-            None,
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Direction",
+            Type::r#enum([Type::literal("Up"), Type::literal("Down")]),
         ),
-    ));
+        "dir",
+        Type::named("Direction"),
+        None,
+    )));
     validate_with_luau_lsp(
         &out,
         r#"
@@ -500,8 +481,7 @@ local _u: Direction = "Up"
 #[test]
 fn test_luau_lsp_alias() {
     let out = generate(single(
-        Definition::start()
-            .register_as("StringOrNum", Type::string() | Type::number()),
+        Definition::start().register_as("StringOrNum", Type::string() | Type::number()),
     ));
     validate_with_luau_lsp(
         &out,
@@ -529,22 +509,21 @@ local _result: string = greet("world")
 
 #[test]
 fn test_luau_lsp_class_fields_and_methods() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Player",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("name", Type::string(), ())
-                        .field("score", Type::integer(), ())
-                        .method::<(), String>("getName", ()),
-                ),
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Player",
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("name", Type::string(), ())
+                    .field("score", Type::integer(), ())
+                    .method::<(), String>("getName", ())
+                    .build(),
             ),
-            "player",
-            Type::named("Player"),
-            None,
         ),
-    ));
+        "player",
+        Type::named("Player"),
+        None,
+    )));
     validate_with_luau_lsp(
         &out,
         r#"
@@ -557,21 +536,20 @@ local _gn: string = player:getName()
 
 #[test]
 fn test_luau_lsp_class_with_meta_method() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Obj",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("x", Type::number(), ())
-                        .meta_method::<(), String>("__tostring", ()),
-                ),
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Obj",
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("x", Type::number(), ())
+                    .meta_method::<(), String>("__tostring", ())
+                    .build(),
             ),
-            "obj",
-            Type::named("Obj"),
-            None,
         ),
-    ));
+        "obj",
+        Type::named("Obj"),
+        None,
+    )));
     validate_with_luau_lsp(
         &out,
         r#"
@@ -583,20 +561,19 @@ local _x: number = obj.x
 
 #[test]
 fn test_luau_lsp_optional_type() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Container",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("value", Type::string() | Type::nil(), ()),
-                ),
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Container",
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("value", Type::string() | Type::nil(), ())
+                    .build(),
             ),
-            "c",
-            Type::named("Container"),
-            None,
         ),
-    ));
+        "c",
+        Type::named("Container"),
+        None,
+    )));
     assert_eq!(
         out.trim(),
         "declare class Container
@@ -615,20 +592,19 @@ local _v: string? = c.value
 
 #[test]
 fn test_luau_lsp_array_type() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Holder",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("items", Type::array(Type::string()), ()),
-                ),
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Holder",
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("items", Type::array(Type::string()), ())
+                    .build(),
             ),
-            "h",
-            Type::named("Holder"),
-            None,
         ),
-    ));
+        "h",
+        Type::named("Holder"),
+        None,
+    )));
     validate_with_luau_lsp(
         &out,
         r#"
@@ -639,20 +615,19 @@ local _items: {string} = h.items
 
 #[test]
 fn test_luau_lsp_map_type() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Registry",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("data", Type::map(Type::string(), Type::number()), ()),
-                ),
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Registry",
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("data", Type::map(Type::string(), Type::number()), ())
+                    .build(),
             ),
-            "reg",
-            Type::named("Registry"),
-            None,
         ),
-    ));
+        "reg",
+        Type::named("Registry"),
+        None,
+    )));
     validate_with_luau_lsp(
         &out,
         r#"
@@ -668,17 +643,11 @@ fn test_luau_lsp_complex_definition() {
             Definition::start()
                 .register_as(
                     "System",
-                    Type::r#enum([
-                        Type::literal("Black"),
-                        Type::literal("White"),
-                    ]),
+                    Type::r#enum([Type::literal("Black"), Type::literal("White")]),
                 )
                 .register_as(
                     "Color",
-                    Type::r#enum([
-                        Type::named("System"),
-                        Type::integer(),
-                    ]),
+                    Type::r#enum([Type::named("System"), Type::integer()]),
                 )
                 .register_as(
                     "Example",
@@ -686,7 +655,8 @@ fn test_luau_lsp_complex_definition() {
                         TypedClassBuilder::default()
                             .field("color", Type::named("Color"), ())
                             .method::<(), String>("describe", ())
-                            .meta_method::<(), String>("__tostring", ()),
+                            .meta_method::<(), String>("__tostring", ())
+                            .build(),
                     ),
                 ),
             "example",
@@ -730,8 +700,7 @@ fn test_mismatch_variadic_erases_to_any() {
 
     // When used as a function parameter, the generated output uses `any`
     let out = generate(single(
-        Definition::start()
-            .function::<(String, Variadic<i64>), ()>("log", ()),
+        Definition::start().function::<(String, Variadic<i64>), ()>("log", ()),
     ));
     assert_eq!(
         out.trim(),
@@ -746,22 +715,27 @@ fn test_luau_lsp_static_functions() {
     let mut builder = TypedClassBuilder::default()
         .field("name", Type::string(), ())
         .method::<(), String>("getName", ());
-    builder.functions.insert(
+    builder.typed_class.functions.insert(
         "create".into(),
         Func {
-            params: vec![Param { name: Some("name".into()), ty: Type::string(), doc: None }],
-            returns: vec![Return { ty: Type::named("Player"), doc: None }],
+            params: vec![Param {
+                name: Some("name".into()),
+                ty: Type::string(),
+                doc: None,
+            }],
+            returns: vec![Return {
+                ty: Type::named("Player"),
+                doc: None,
+            }],
             doc: None,
         },
     );
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as("Player", Type::class(builder)),
-            "player",
-            Type::named("Player"),
-            None,
-        ),
-    ));
+    let out = generate(single(with_value(
+        Definition::start().register_as("Player", Type::class(builder.build())),
+        "player",
+        Type::named("Player"),
+        None,
+    )));
     validate_with_luau_lsp(
         &out,
         "local p: Player = Player.create(\"alice\")\nlocal _n: string = p:getName()\nlocal _name: string = p.name\n",
@@ -778,7 +752,8 @@ fn test_static_functions_separate_table() {
             "Factory",
             Type::class(
                 TypedClassBuilder::default()
-                    .function::<String, i64>("create", "A static factory method"),
+                    .function::<String, i64>("create", "A static factory method")
+                    .build(),
             ),
         ),
     ));
@@ -803,12 +778,10 @@ declare Factory: {
 /// which position.
 #[test]
 fn test_mismatch_heterogeneous_tuple_loses_position() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Record",
-            Type::tuple([Type::string(), Type::integer(), Type::boolean()]),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Record",
+        Type::tuple([Type::string(), Type::integer(), Type::boolean()]),
+    )));
     // Instead of something like [string, integer, boolean], we get
     // an array whose element type is the union of all tuple types
     assert_eq!(
@@ -824,21 +797,20 @@ fn test_mismatch_heterogeneous_tuple_loses_position() {
 /// Luau generator maps `Type::integer()` to `number` to avoid this.
 #[test]
 fn test_integer_maps_to_number() {
-    let out = generate(single(
-        with_value(
-            Definition::start().register_as(
-                "Stats",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("count", Type::integer(), "An integer field")
-                        .field("ratio", Type::number(), "A float field"),
-                ),
+    let out = generate(single(with_value(
+        Definition::start().register_as(
+            "Stats",
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("count", Type::integer(), "An integer field")
+                    .field("ratio", Type::number(), "A float field")
+                    .build(),
             ),
-            "stats",
-            Type::named("Stats"),
-            None,
         ),
-    ));
+        "stats",
+        Type::named("Stats"),
+        None,
+    )));
     assert_eq!(
         out.trim(),
         "declare class Stats
@@ -869,27 +841,26 @@ local _r: number = stats.ratio
 /// assignable to `integer`.
 #[test]
 fn test_luau_lsp_integer_fields_accept_numeric_literals() {
-    let out = generate(single(
-        with_value(
-            Definition::start()
-                .register_as(
-                    "Inventory",
-                    Type::class(
-                        TypedClassBuilder::default()
-                            .field("count", Type::integer(), ())
-                            .field("weight", Type::number(), ())
-                            .method::<(i32,), ()>("addItems", ())
-                            .method::<(), i64>("total", ()),
-                    ),
-                )
-                .param("a", "")
-                .param("b", "")
-                .function::<(i32, i32), i32>("add", ()),
-            "inv",
-            Type::named("Inventory"),
-            None,
-        ),
-    ));
+    let out = generate(single(with_value(
+        Definition::start()
+            .register_as(
+                "Inventory",
+                Type::class(
+                    TypedClassBuilder::default()
+                        .field("count", Type::integer(), ())
+                        .field("weight", Type::number(), ())
+                        .method::<(i32,), ()>("addItems", ())
+                        .method::<(), i64>("total", ())
+                        .build(),
+                ),
+            )
+            .param("a", "")
+            .param("b", "")
+            .function::<(i32, i32), i32>("add", ()),
+        "inv",
+        Type::named("Inventory"),
+        None,
+    )));
 
     // The generated output should use `number` everywhere, not `integer`
     assert!(
@@ -921,16 +892,14 @@ local _t: number = inv:total()
 fn test_mismatch_enum_tuple_variants_flatten() {
     // An enum where one variant carries a tuple of (integer, string)
     // and another carries just a string
-    let out = generate(single(
-        Definition::start().register_as(
-            "Payload",
-            Type::r#enum([
-                Type::literal("None"),
-                Type::tuple([Type::integer(), Type::string()]),
-                Type::tuple([Type::boolean()]),
-            ]),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Payload",
+        Type::r#enum([
+            Type::literal("None"),
+            Type::tuple([Type::integer(), Type::string()]),
+            Type::tuple([Type::boolean()]),
+        ]),
+    )));
     // The tuple variants become union-arrays, losing arity info
     assert_eq!(
         out.trim(),

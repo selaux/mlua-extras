@@ -21,7 +21,7 @@ jobs:
         features:
           # No features at all
           - ""
-          # lua54+vendored base, then all combinations of: send, async, derive
+          # lua54+vendored base, then all combinations of: send, async, macros
           - lua54,vendored
           - lua54,vendored,send
           - lua54,vendored,async
@@ -31,12 +31,12 @@ jobs:
           - lua54,vendored,send,macros
           - lua54,vendored,async,macros
           - lua54,vendored,send,async,macros
-          # Full feature set including serde and macros
-          - lua54,vendored,send,async,serde,macros
+          # Full feature set including macros
+          - lua54,vendored,send,async,macros
           # Luau feature combinations
           - luau,vendored
           - luau,vendored,macros,userdata-wrappers
-          - luau,vendored,send,async,serde,macros
+          - luau,vendored,send,async,macros
     steps:
       - uses: actions/checkout@v6
 

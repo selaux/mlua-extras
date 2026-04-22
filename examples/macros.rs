@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use mlua::{FromLua, IntoLua, Lua};
 use mlua_extras::{
     TypedUserData,
     typed::generator::{
@@ -9,149 +8,73 @@ use mlua_extras::{
     typed_user_data_impl,
 };
 
-/// Structured Data
+/// Simple Counter
 #[derive(Clone, TypedUserData)]
-struct Data {
-    /// Name of the data source
-    name: String,
-}
+struct Counter { value: i64 }
 
 #[typed_user_data_impl]
-impl Data {
-    #[method]
-    fn get_data(&self) -> mlua::Result<String> {
-        Ok(self.name.clone())
-    }
-
-    /// This method is called last.
-    ///
-    /// use `#[field(skip)]` for fields that are assigned to the index
-    /// to allow for them to overridden in this impl
-    #[metamethod(Index)]
-    fn index(&self, lua: &Lua, idx: isize) -> mlua::Result<mlua::Value> {
-        match idx {
-            -1 => "TESTING".into_lua(lua),
-            1 => self.name.clone().into_lua(lua),
-            _ => Ok(mlua::Value::Nil),
-        }
-    }
-
-    /// This method is called last.
-    ///
-    /// use `#[field(skip)]` for fields that are assigned to the index
-    /// to allow for them to overridden in this impl
-    #[metamethod(NewIndex)]
-    fn new_index(&mut self, lua: &Lua, idx: isize, value: mlua::Value) -> mlua::Result<()> {
-        match idx {
-            1 => self.name = <String as FromLua>::from_lua(value, lua)?,
-            // It is recommended to return some sort of error from this implementation.
-            //
-            // This enforces strict indexing into userdata types.
-            _ => return Err(mlua::Error::runtime(format!("invalid index '{idx}'"))),
-        }
-        Ok(())
-    }
-}
-
-/// Kind of action
-#[derive(Clone, TypedUserData)]
-enum Custom {
-    A,
-    B(
-        /// Variant B Data
-        String,
-    ),
-    C {
-        name: String,
-        /// Age of variant C
-        age: u8,
-    },
-    D(
-        /// Variant D Data
-        u32,
-    ),
-}
-
-#[typed_user_data_impl]
-impl Custom {
-    /// Static field provided to Lua
+impl Counter {
+    /// The default count
     const COUNT: usize = 10;
 
-    /// Static field fetched from calling this
-    /// function once
-    #[field(rename = "PI")]
-    fn pi() -> f32 {
-        3.14
+    /// Max count value
+    #[field]
+    fn max() -> i64 {
+        i64::MAX
     }
 
-    #[field(rename = "INF")]
-    fn inf() -> f32 {
-        f32::INFINITY
+    /// Min count value
+    #[field(rename = "MIN")]
+    fn min() -> i64 {
+        0
     }
 
-    #[field(rename = "NAN")]
-    fn nan() -> f32 {
-        f32::NAN
-    }
-
-    /// Get the direction [Getter]
+    /// Direction of the counter
     #[getter("direction")]
     fn get_direction(&self) -> String {
-        "west".into()
+        "up".into()
     }
 
-    /// Get the direction [Setter]
     #[setter("direction")]
-    fn set_direction(&self, input: String) {
-        _ = input;
+    fn set_direction(&mut self, dir: String) {
+        println!("Direction: {dir}");
     }
 
-    /// Get the message based on the variant
+    /// Get the current counter value
     #[method]
-    fn message(&self) -> String {
-        match self {
-            Self::A => "Hello, world!".into(),
-            Self::B(msg) => msg.clone(),
-            Self::C { name, age } => format!("{name} age {age}"),
-            Self::D(count) => count.to_string(),
-        }
+    fn get(&self) -> i64 { self.value }
+
+    /// Increment the counter
+    #[method]
+    fn increment(&mut self) { self.value += 1 }
+
+    /// Create a new table
+    #[method]
+    fn create_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
+        lua.create_table()
+    }
+
+    /// String representation of the counter
+    #[metamethod(ToString)]
+    fn to_string(&self) -> String { format!("Counter({})", self.value) }
+
+    // Requires the `async` feature
+    // Must be accessed from lua code with an entry of `mlua::Chunk::eval_async` or `mlua::Chunk::exec_async`
+
+    /// Fetch the global counter online
+    #[method]
+    async fn fetch(&self, lua: mlua::Lua, url: String) -> mlua::Result<String> {
+        _ = lua;
+        Ok(format!("fetched: {url}"))
     }
 }
 
 fn main() -> mlua::Result<()> {
-    let lua = Lua::new();
-
-    lua.globals().set(
-        "data",
-        Data {
-            name: "MluaExtras".into(),
-        },
-    )?;
-    lua.globals().set("custom", Custom::A)?;
-
-    lua.load(
-        "
-    print('Index [1]:', data[1])
-    data[1] = 'HelloWorld'
-    print('Set data[1] to \\'HelloWorld\\'')
-    print('Get Data:', data:get_data())
-    print('Index [-1]:', data[-1])
-    print('Custom:', custom._variant, custom:message())
-
-    print('Custom Count:', custom.COUNT)
-
-    local ok, value = pcall(function () return custom[1] end)
-    print('Custom [1]: OK', ok, tostring(value):match('(.-)\\n') or tostring(value))
-    ",
-    )
-    .exec()?;
-
     let definitions: Definitions = Definitions::start()
         .define(
             "macros",
             Definition::start()
-                .register::<Data>("Data")
-                .register::<Custom>("Custom"),
+                .register::<Counter>("Counter")
         )
         .finish();
 

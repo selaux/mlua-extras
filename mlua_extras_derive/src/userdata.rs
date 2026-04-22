@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use darling::FromField;
 use proc_macro::Literal;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use syn::{Data, DeriveInput, Fields, LitInt, Variant, spanned::Spanned};
+use syn::{Data, DeriveInput, Fields, LitInt, spanned::Spanned};
 use quote::quote;
 
 use crate::{Builder, extract::{Index, UserDataEnumField, UserDataField, doc_comment}};

@@ -140,7 +140,7 @@ impl<'writer> DefinitionWriter<'writer> {
 
                     if !type_data.static_fields.is_empty() || !type_data.functions.is_empty() || !type_data.methods.is_empty() || !type_data.is_meta_empty() {
                         writeln!(buffer, "local _CLASS_{}_ = {{", definition.name)?;
-                        for (name, StaticField { inner: Field { ty, doc }, default }) in type_data.static_fields.iter() {
+                        for (name, StaticField { inner: Field { doc, .. }, default }) in type_data.static_fields.iter() {
                             if let Some(docs) = self.accumulate_docs(&[doc.as_deref()]) {
                                 writeln!(buffer, "\t{}", docs.join("\n\t"))?;
                             }
@@ -160,7 +160,7 @@ impl<'writer> DefinitionWriter<'writer> {
                                     &func.returns,
                                     true
                                 )?
-                                .join("\n  ")
+                                .join("\n\t")
                             )?;
                         }
 
@@ -178,7 +178,7 @@ impl<'writer> DefinitionWriter<'writer> {
                                     &func.returns,
                                     true
                                 )?
-                                .join("\n  ")
+                                .join("\n\t")
                             )?;
                         }
 
@@ -214,7 +214,7 @@ impl<'writer> DefinitionWriter<'writer> {
                                         &func.returns,
                                         true
                                     )?
-                                    .join("\n    ")
+                                    .join("\n\t\t")
                                 )?;
                             }
 
@@ -232,10 +232,10 @@ impl<'writer> DefinitionWriter<'writer> {
                                         &func.returns,
                                         true
                                     )?
-                                    .join("\n    ")
+                                    .join("\n\t\t")
                                 )?;
                             }
-                            writeln!(buffer, "  }}")?;
+                            writeln!(buffer, "\t}}")?;
                         }
                         writeln!(buffer, "}}")?;
                     }
