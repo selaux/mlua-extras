@@ -124,7 +124,15 @@ impl<T: Typed> Typed for Variadic<T> {
 /// {type} | nil
 impl<T: Typed> Typed for Option<T> {
     fn ty() -> Type {
-        Type::Union(vec![T::ty(), Type::Single("nil".into())])
+        T::ty() | Type::nil()
+    }
+
+    fn as_param() -> Type {
+        T::as_param() | Type::nil()
+    }
+
+    fn as_return() -> Type {
+        T::as_return() | Type::nil()
     }
 }
 
