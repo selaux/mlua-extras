@@ -9,243 +9,14 @@ pub use class::{
 };
 
 use std::{
-    borrow::Cow,
-    cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    marker::PhantomData,
-    rc::Rc,
-    sync::{Arc, Mutex},
+    borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData
 };
+#[cfg(feature="userdata-wrappers")]
+use std::{sync::{Arc, Mutex}, cell::{Cell, RefCell}, rc::Rc};
 
 pub use function::{Param, Return, TypedFunction};
 
 use mlua::{IntoLua, MetaMethod, Value, Variadic};
-
-/// Add a lua [`Type`] representation to a rust type
-pub trait Typed {
-    /// Get the type representation
-    fn ty() -> Type;
-
-    #[inline(always)]
-    fn implicit() -> impl IntoIterator<Item = (&'static str, Type)> {
-        []
-    }
-
-    /// Get the type as a function parameter
-    fn as_param() -> Type {
-        Self::ty()
-    }
-
-    /// Get the type as a function return
-    fn as_return() -> Type {
-        Self::ty()
-    }
-}
-
-#[macro_export]
-macro_rules! join_types {
-    ($($ty:expr),+) => {
-        $crate::typed::Type::union([
-            $($crate::typed::Type::from($ty),)+
-        ])
-    };
-}
-
-macro_rules! impl_static_typed {
-    {
-        $(
-            $($target: ty)|*
-            => $name: literal),*
-            $(,)?
-    } => {
-        $(
-            $(
-                impl Typed for $target {
-                    fn ty() -> Type {
-                        Type::named($name)
-                    }
-                }
-            )*
-        )*
-    };
-}
-
-macro_rules! impl_static_typed_generic {
-    {
-        $(
-            $(for<$($lt: lifetime),+> $target: ty)|*
-            => $name: literal),*
-            $(,)?
-    } => {
-        $(
-            $(
-                impl<$($lt,)+> Typed for $target {
-                    fn ty() -> Type {
-                        Type::named($name)
-                    }
-                }
-            )*
-        )*
-    };
-}
-
-impl_static_typed! {
-    mlua::LightUserData => "lightuserdata",
-    mlua::Error => "error",
-    String | &str => "string",
-    u8 | u16 | u32 | u64 | usize | u128 | i8 | i16 | i32 | i64 | isize | i128 => "integer",
-    f32 | f64 => "number",
-    bool => "boolean",
-
-    mlua::Function => "fun()",
-    mlua::Table => "table",
-    mlua::AnyUserData => "userdata",
-    mlua::String => "string",
-    mlua::Thread => "thread",
-}
-
-impl_static_typed_generic! {
-    for<'a> Cow<'a, str> => "string",
-}
-
-impl Typed for mlua::Value {
-    fn ty() -> Type {
-        Type::Single("any".into())
-    }
-}
-
-impl<T: Typed> Typed for Variadic<T> {
-    /// ...type
-    fn ty() -> Type {
-        Type::any()
-    }
-}
-
-/// {type} | nil
-impl<T: Typed> Typed for Option<T> {
-    fn ty() -> Type {
-        T::ty() | Type::nil()
-    }
-
-    fn as_param() -> Type {
-        T::as_param() | Type::nil()
-    }
-
-    fn as_return() -> Type {
-        T::as_return() | Type::nil()
-    }
-}
-
-impl<T: IntoLuaTypeLiteral> From<T> for Type {
-    fn from(value: T) -> Self {
-        Type::Single(value.into_lua_type_literal().into())
-    }
-}
-
-impl<T: Typed> Typed for Arc<T> {
-    fn ty() -> Type {
-        T::ty()
-    }
-}
-
-impl<T: Typed> Typed for Rc<T> {
-    fn ty() -> Type {
-        T::ty()
-    }
-}
-
-impl<T: Typed> Typed for Cell<T> {
-    fn ty() -> Type {
-        T::ty()
-    }
-}
-
-impl<T: Typed> Typed for RefCell<T> {
-    fn ty() -> Type {
-        T::ty()
-    }
-}
-
-impl<T: Typed> Typed for Mutex<T> {
-    fn ty() -> Type {
-        T::ty()
-    }
-}
-
-impl<T: Typed> Typed for PhantomData<T> {
-    fn ty() -> Type {
-        T::ty()
-    }
-}
-
-// Represents a lua tuple.
-//
-// With luaCATS tuples are represented with square brackets.
-//
-// # Example
-//
-// ```lua
-// --- @type [string, integer, "literal"]
-// ```
-impl<const N: usize> From<[Type; N]> for Type {
-    fn from(value: [Type; N]) -> Self {
-        Type::Tuple(Vec::from(value))
-    }
-}
-
-// Array type
-
-impl<I: Typed, const N: usize> Typed for [I; N] {
-    fn ty() -> Type {
-        Type::Array(I::ty().into())
-    }
-}
-
-impl<I: Typed> Typed for Vec<I> {
-    fn ty() -> Type {
-        Type::Array(I::ty().into())
-    }
-}
-
-impl<I: Typed> Typed for &[I] {
-    fn ty() -> Type {
-        Type::Array(I::ty().into())
-    }
-}
-
-impl<I: Typed> Typed for HashSet<I> {
-    fn ty() -> Type {
-        Type::Array(I::ty().into())
-    }
-}
-
-impl<I: Typed> Typed for BTreeSet<I> {
-    fn ty() -> Type {
-        Type::Array(I::ty().into())
-    }
-}
-
-// Map type
-
-impl<K, V> Typed for BTreeMap<K, V>
-where
-    K: Typed,
-    V: Typed,
-{
-    fn ty() -> Type {
-        Type::Map(K::ty().into(), V::ty().into())
-    }
-}
-
-impl<K, V> Typed for HashMap<K, V>
-where
-    K: Typed,
-    V: Typed,
-{
-    fn ty() -> Type {
-        Type::Map(K::ty().into(), V::ty().into())
-    }
-}
 
 /// Represents a lua table key
 ///
@@ -643,6 +414,357 @@ impl_type_literal! {
     f32, f64
 }
 impl_type_literal! {bool}
+
+/// Add a lua [`Type`] representation to a rust type
+pub trait Typed {
+    /// Get the type representation
+    fn ty() -> Type;
+
+    #[inline(always)]
+    fn implicit() -> impl IntoIterator<Item = (&'static str, Type)> {
+        []
+    }
+
+    /// Get the type as a function parameter
+    fn as_param() -> Type {
+        Self::ty()
+    }
+
+    /// Get the type as a function return
+    fn as_return() -> Type {
+        Self::ty()
+    }
+}
+
+#[macro_export]
+macro_rules! join_types {
+    ($($ty:expr),+) => {
+        $crate::typed::Type::union([
+            $($crate::typed::Type::from($ty),)+
+        ])
+    };
+}
+
+macro_rules! impl_static_typed {
+    {
+        $(
+            $($target: ty)|*
+            => $name: literal),*
+            $(,)?
+    } => {
+        $(
+            $(
+                impl Typed for $target {
+                    fn ty() -> Type {
+                        Type::named($name)
+                    }
+                }
+            )*
+        )*
+    };
+}
+
+macro_rules! impl_static_typed_generic {
+    {
+        $(
+            $(for<$($lt: lifetime),+> $target: ty)|*
+            => $name: literal),*
+            $(,)?
+    } => {
+        $(
+            $(
+                impl<$($lt,)+> Typed for $target {
+                    fn ty() -> Type {
+                        Type::named($name)
+                    }
+                }
+            )*
+        )*
+    };
+}
+
+impl_static_typed! {
+    mlua::LightUserData => "lightuserdata",
+    mlua::Error => "error",
+    String | &str => "string",
+    u8 | u16 | u32 | u64 | usize | u128 | i8 | i16 | i32 | i64 | isize | i128 => "integer",
+    f32 | f64 => "number",
+    bool => "boolean",
+
+    mlua::Function => "fun()",
+    mlua::Table => "table",
+    mlua::AnyUserData => "userdata",
+    mlua::String => "string",
+    mlua::Thread => "thread",
+}
+
+impl_static_typed_generic! {
+    for<'a> Cow<'a, str> => "string",
+}
+
+impl Typed for mlua::Value {
+    fn ty() -> Type {
+        Type::Single("any".into())
+    }
+}
+
+impl<T: Typed> Typed for Variadic<T> {
+    /// ...type
+    fn ty() -> Type {
+        Type::any()
+    }
+}
+
+impl<T: IntoLuaTypeLiteral> From<T> for Type {
+    fn from(value: T) -> Self {
+        Type::Single(value.into_lua_type_literal().into())
+    }
+}
+
+/// {type} | nil
+impl<T: Typed> Typed for Option<T> {
+    fn ty() -> Type {
+        T::ty() | Type::nil()
+    }
+
+    fn as_param() -> Type {
+        T::as_param() | Type::nil()
+    }
+
+    fn as_return() -> Type {
+        T::as_return() | Type::nil()
+    }
+}
+
+impl<T: Typed> Typed for Box<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+impl<T: Typed> Typed for PhantomData<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+// Represents a lua tuple.
+//
+// With luaCATS tuples are represented with square brackets.
+//
+// # Example
+//
+// ```lua
+// --- @type [string, integer, "literal"]
+// ```
+impl<const N: usize> From<[Type; N]> for Type {
+    fn from(value: [Type; N]) -> Self {
+        Type::Tuple(Vec::from(value))
+    }
+}
+
+// Array type
+
+impl<I: Typed, const N: usize> Typed for [I; N] {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Array(I::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Array(I::as_return().into())
+    }
+}
+
+impl<I: Typed> Typed for Vec<I> {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Array(I::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Array(I::as_return().into())
+    }
+}
+
+impl<I: Typed> Typed for &[I] {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Array(I::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Array(I::as_return().into())
+    }
+}
+
+impl<I: Typed> Typed for HashSet<I> {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Array(I::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Array(I::as_return().into())
+    }
+}
+
+impl<I: Typed> Typed for BTreeSet<I> {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Array(I::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Array(I::as_return().into())
+    }
+}
+
+// Map type
+
+impl<K, V> Typed for BTreeMap<K, V>
+where
+    K: Typed,
+    V: Typed,
+{
+    fn ty() -> Type {
+        Type::Map(K::ty().into(), V::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Map(K::as_param().into(), V::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Map(K::as_return().into(), V::as_return().into())
+    }
+}
+
+impl<K, V> Typed for HashMap<K, V>
+where
+    K: Typed,
+    V: Typed,
+{
+    fn ty() -> Type {
+        Type::Map(K::ty().into(), V::ty().into())
+    }
+
+    fn as_param() -> Type {
+        Type::Map(K::as_param().into(), V::as_param().into())
+    }
+
+    fn as_return() -> Type {
+        Type::Map(K::as_return().into(), V::as_return().into())
+    }
+}
+
+// External Types
+
+#[cfg(feature="userdata-wrappers")]
+impl<T: Typed> Typed for Arc<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+#[cfg(feature="userdata-wrappers")]
+impl<T: Typed> Typed for Rc<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+#[cfg(feature="userdata-wrappers")]
+impl<T: Typed> Typed for Cell<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+#[cfg(feature="userdata-wrappers")]
+impl<T: Typed> Typed for RefCell<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+#[cfg(feature="userdata-wrappers")]
+impl<T: Typed> Typed for Mutex<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
 
 /// Typed information for a lua [`MultiValue`][mlua::MultiValue]
 pub trait TypedMultiValue {

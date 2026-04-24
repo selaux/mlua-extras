@@ -11,7 +11,7 @@ description = "MLua extras macros"
 readme = "README.md"
 homepage = "https://github.com/Tired-Fox/mlua-extras"
 repository = "https://github.com/Tired-Fox/mlua-extras/tree/main/mlua_extras_derive"
-keywords = ["lua", "types", "mlua", "macros", "derive"]
+keywords = ["lua", "types", "mlua", "macros"]
 
 [dependencies]
 darling = "0.23.0"
