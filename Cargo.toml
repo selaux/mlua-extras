@@ -15,18 +15,23 @@ features = ["mlua", "lua54", "send", "async", "macros", "vendored"]
 
 [features]
 mlua = ["dep:mlua"]
-lua54 = ["mlua", "mlua/lua54"]
-lua53 = ["mlua", "mlua/lua53"]
-lua52 = ["mlua", "mlua/lua52"]
-lua51 = ["mlua", "mlua/lua51"]
-luajit = ["mlua", "mlua/luajit"]
-luau = ["mlua", "mlua/luau"]
+lua55 = ["mlua/lua55", "mlua"]
+lua54 = ["mlua/lua54", "mlua"]
+lua53 = ["mlua/lua53", "mlua"]
+lua52 = ["mlua/lua52", "mlua"]
+lua51 = ["mlua/lua51", "mlua"]
+luajit = ["mlua/luajit", "mlua"]
+luajit52 = ["mlua/luajit52", "mlua"]
+luau = ["mlua/luau", "mlua"]
+luau-jit = ["mlua/luau", "mlua"]
+luau-vector4 = ["mlua/luau-vector4", "mlua"]
 vendored = ["mlua/vendored"]
-serde = ["mlua/serde"]
-macros = ["mlua/macros", "dep:mlua-extras-derive"]
 module = ["mlua/module"]
-send = ["mlua/send"]
 async = ["mlua/async"]
+send = ["mlua/send"]
+error-send = ["mlua/error-send"]
+macros = ["mlua/macros", "dep:mlua-extras-derive"]
+anyhow = ["mlua/anyhow"]
 userdata-wrappers = ["mlua/userdata-wrappers"]
 
 [dev-dependencies]
@@ -37,8 +42,11 @@ tokio = { version = "1", features = ["macros", "rt"] }
 [dependencies]
 mlua-extras-derive = { path = "./mlua_extras_derive", version = "11.6.0", optional = true }
 
-mlua = { version = "0.11.6", optional = true, default-features = false }
+mlua = { version = "0.11.6", optional = true, default-features = false, features = ["serde"] }
+
+serde = { version = "1.0.228" }
 strum = { version = "0.27.2", features = ["derive"], default-features = false }
+ryu = "1.0.23"
 
 [[example]]
 name = "macros"

@@ -1,3 +1,5 @@
+pub mod ser;
+
 #[cfg(feature="mlua")]
 pub mod typed;
 #[cfg(feature="mlua")]
@@ -7,7 +9,7 @@ pub mod extras;
 pub use mlua;
 
 #[cfg(feature="macros")]
-pub use mlua_extras_derive::{Typed, UserData, user_data_impl};
+pub use mlua_extras_derive::{UserData, user_data_impl, Typed, TypedUserData, typed_user_data_impl};
 
 #[cfg(feature = "send")]
 /// Used by the `send` feature
@@ -28,3 +30,11 @@ pub trait __DefaultAutoMethods: Sized {
 }
 #[cfg(feature = "macros")]
 impl<T: Sized> __DefaultAutoMethods for T {}
+
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub trait __DefaultAutoFields: Sized {
+    fn __auto_add_fields<F>(_f: &mut F) {}
+}
+#[cfg(feature = "macros")]
+impl<T: Sized> __DefaultAutoFields for T {}

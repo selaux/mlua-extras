@@ -1,89 +1,99 @@
-use mlua::{IntoLua, FromLua, Lua, StdLib};
-use mlua_extras::{UserData, Typed, user_data_impl};
+use std::path::PathBuf;
 
-#[derive(Clone, UserData)]
-struct Data {
-    name: String
-}
-
-#[user_data_impl]
-impl Data {
-    #[method]
-    fn get_data(&self) -> mlua::Result<String> {
-        Ok(self.name.clone())
-    }
-
-    /// This method is called last.
-    /// 
-    /// use `#[field(skip)]` for fields that are assigned to the index
-    /// to allow for them to overridden in this impl
-    #[metamethod(Index)]
-    fn index(&self, lua: &Lua, idx: isize) -> mlua::Result<mlua::Value> {
-        match idx {
-            -1 => "TESTING".into_lua(lua),
-            1 => self.name.clone().into_lua(lua),
-            _ => Ok(mlua::Value::Nil)
-        }
-    }
-    
-    /// This method is called last.
-    /// 
-    /// use `#[field(skip)]` for fields that are assigned to the index
-    /// to allow for them to overridden in this impl
-    #[metamethod(NewIndex)]
-    fn new_index(&mut self, lua: &Lua, idx: isize, value: mlua::Value) -> mlua::Result<()> {
-        match idx {
-            1 => self.name = <String as FromLua>::from_lua(value, lua)?,
-            // It is recommended to return some sort of error from this implementation.
-            //
-            // This enforces strict indexing into userdata types.
-            _ => return Err(mlua::Error::runtime(format!("invalid index '{idx}'")))
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, UserData)]
-enum Kind {
-    A,
-    B(String),
-    C {
-        name: String,
-        age: u8,
+use mlua_extras::{
+    TypedUserData,
+    typed::generator::{
+        Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator,
     },
-    D(u32),
-}
+    typed_user_data_impl,
+};
 
-#[user_data_impl]
-impl Kind {
+/// Simple Counter
+#[derive(Clone, TypedUserData)]
+struct Counter { value: i64 }
+
+#[typed_user_data_impl]
+impl Counter {
+    /// The default count
+    const COUNT: usize = 10;
+
+    /// Max count value
+    #[field]
+    fn max() -> i64 {
+        i64::MAX
+    }
+
+    /// Min count value
+    #[field(rename = "MIN")]
+    fn min() -> i64 {
+        0
+    }
+
+    /// Direction of the counter
+    #[getter("direction")]
+    fn get_direction(&self) -> String {
+        "up".into()
+    }
+
+    #[setter("direction")]
+    fn set_direction(&mut self, dir: String) {
+        println!("Direction: {dir}");
+    }
+
+    /// Get the current counter value
     #[method]
-    fn message(&self) -> String {
-        match self {
-            Self::A => "Hello, world!".into(),
-            Self::B(msg) => msg.clone(),
-            Self::C{ name, age } => format!("{name} age {age}"),
-            Self::D(count) => count.to_string()
-        }
+    fn get(&self) -> i64 { self.value }
+
+    /// Increment the counter
+    #[method]
+    fn increment(&mut self) { self.value += 1 }
+
+    /// Create a new table
+    #[method]
+    fn create_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
+        lua.create_table()
+    }
+
+    /// String representation of the counter
+    #[metamethod(ToString)]
+    fn to_string(&self) -> String { format!("Counter({})", self.value) }
+
+    // Requires the `async` feature
+    // Must be accessed from lua code with an entry of `mlua::Chunk::eval_async` or `mlua::Chunk::exec_async`
+
+    /// Fetch the global counter online
+    #[method]
+    async fn fetch(&self, lua: mlua::Lua, url: String) -> mlua::Result<String> {
+        _ = lua;
+        Ok(format!("fetched: {url}"))
     }
 }
 
 fn main() -> mlua::Result<()> {
-    let lua = unsafe { Lua::unsafe_new_with(StdLib::ALL, Default::default()) };
+    let definitions: Definitions = Definitions::start()
+        .define(
+            "macros",
+            Definition::start()
+                .register::<Counter>("Counter")
+        )
+        .finish();
 
-    lua.globals().set("data", Data { name: "MluaExtras".into() })?;
-    lua.globals().set("kind", Kind::A)?;
+    let types_path = PathBuf::from("examples/types");
+    if !types_path.exists() {
+        std::fs::create_dir_all(&types_path).unwrap();
+    }
 
-    lua.load("
-    print('Index [1]:', data[1])
-    data[1] = 'HelloWorld'
-    print('Set data[1] to \\'HelloWorld\\'')
-    print('Get Data:', data:get_data())
-    print('Index [-1]:', data[-1])
-    print('Kind:', kind._variant, kind:message())
+    let dfg = DefinitionFileGenerator::new(definitions.clone());
+    for (name, writer) in dfg.iter() {
+        println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        writer.write_file(types_path.join(name)).unwrap();
+    }
 
-    local ok, value = pcall(function() return kind[1] end)
-    print('Kind [1]: OK', ok, value)
-    ").exec()?;
+    let luau_gen = LuauDefinitionFileGenerator::new(definitions);
+    for (name, writer) in luau_gen.iter() {
+        println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        writer.write_file(types_path.join(name)).unwrap();
+    }
 
     Ok(())
 }

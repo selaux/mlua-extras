@@ -3,8 +3,7 @@ use deluxe::{ParseAttributes, ParseMetaItem};
 use proc_macro2::{Literal, TokenStream};
 use quote::ToTokens;
 use syn::{
-    spanned::Spanned, Attribute, Expr, ExprLit, FnArg, ImplItemFn, Lit, Meta, MetaNameValue, Pat,
-    PatIdent, ReturnType,
+    Attribute, Expr, ExprLit, FnArg, ImplItemConst, ImplItemFn, Lit, Meta, MetaNameValue, Pat, PatIdent, ReturnType, spanned::Spanned
 };
 
 pub fn doc_comment(attrs: &[syn::Attribute]) -> Option<String> {
@@ -73,6 +72,29 @@ pub struct UserDataField {
     pub rename: Option<Index>,
 }
 
+impl UserDataField {
+    pub fn from_impl_const(field: &ImplItemConst) -> Option<Self> {
+        let field_attr = field
+            .attrs
+            .iter()
+            .find(|a| is_field_attr(a))
+            .map(|a| deluxe::parse_attributes::<_, Field>(a).unwrap_or_default())
+            .unwrap_or_default();
+
+        let docs = doc_comment(&field.attrs);
+
+        Some(Self {
+            ident: Some(field.ident.clone()),
+            ty: field.ty.clone(),
+            attrs: docs,
+            skip: field_attr.skip,
+            rename: field_attr.rename.map(Index::Str),
+            readonly: true,
+            writeonly: false,
+        })
+    }
+}
+
 #[derive(Debug, darling::FromField)]
 #[darling(attributes(field), forward_attrs(doc))]
 pub struct UserDataEnumField {
@@ -81,6 +103,8 @@ pub struct UserDataEnumField {
     
     #[darling(default, skip)]
     pub variant: TokenStream,
+    #[darling(default, skip)]
+    pub variant_name: String,
     #[darling(default, skip)]
     pub accessor: TokenStream,
 
@@ -101,22 +125,39 @@ pub struct UserDataEnumField {
 
 #[derive(Debug)]
 pub enum PassBy {
-    Ref,
-    RefMut,
-    Value,
+    Ref {
+        #[allow(unused)]
+        and: syn::token::And,
+        #[allow(unused)]
+        name: syn::Ident
+    },
+    RefMut {
+        #[allow(unused)]
+        and: syn::token::And,
+        mutability: syn::token::Mut,
+        #[allow(unused)]
+        name: syn::Ident
+    },
 }
 impl PassBy {
     fn from_fn_arg(value: Option<&FnArg>) -> Option<Self> {
         match value {
             Some(FnArg::Receiver(recv)) => {
-                if recv.reference.is_some() {
-                    if recv.mutability.is_some() {
-                        Some(PassBy::RefMut)
+                if let Some((and, _lifetime)) = &recv.reference {
+                    if let Some(mutability) = recv.mutability {
+                        Some(PassBy::RefMut {
+                            and: and.clone(),
+                            mutability,
+                            name: syn::Ident::new("self", recv.self_token.span())
+                        })
                     } else {
-                        Some(PassBy::Ref)
+                        Some(PassBy::Ref {
+                            and: and.clone(),
+                            name: syn::Ident::new("self", recv.self_token.span())
+                        })
                     }
                 } else {
-                    Some(PassBy::Value)
+                    proc_macro_error::abort!(recv.self_token, "must be a reference");
                 }
             }
             Some(FnArg::Typed(typed)) => {
@@ -129,13 +170,21 @@ impl PassBy {
                 {
                     if ident == "self" {
                         if by_ref.is_some() {
-                            if mutability.is_some() {
-                                Some(PassBy::RefMut)
+                            let and = syn::token::And(typed.ty.span());
+                            if let Some(mutability) = mutability {
+                                Some(PassBy::RefMut {
+                                    and,
+                                    mutability: *mutability,
+                                    name: ident.clone(),
+                                })
                             } else {
-                                Some(PassBy::Ref)
+                                Some(PassBy::Ref {
+                                    and,
+                                    name: ident.clone(),
+                                })
                             }
                         } else {
-                            Some(PassBy::Value)
+                            proc_macro_error::abort!(ident, "must be a reference");
                         }
                     } else {
                         None
@@ -149,19 +198,38 @@ impl PassBy {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, strum::EnumIs)]
 pub enum MethodKind {
     Regular,
     Meta,
+    StaticField,
+    Getter,
+    Setter,
 }
 impl MethodKind {
-    pub fn is_meta(&self) -> bool {
+    pub fn is_field(&self) -> bool {
         match self {
-            Self::Regular => false,
-            Self::Meta => true,
+            Self::Getter | Self::Setter | Self::StaticField => true,
+            _ => false
         }
     }
+
+    pub fn is_attr(attr: &syn::Attribute) -> bool {
+        is_method_attr(attr)
+            || is_metamethod_attr(attr)
+            || is_getter_attr(attr)
+            || is_setter_attr(attr)
+            || is_field_attr(attr)
+    }
 }
+
+#[derive(Debug, ParseAttributes)]
+#[deluxe(attributes(getter))]
+struct Getter(String);
+
+#[derive(Debug, ParseAttributes)]
+#[deluxe(attributes(setter))]
+struct Setter(String);
 
 #[derive(Debug, ParseAttributes)]
 #[deluxe(attributes(metamethod))]
@@ -173,12 +241,31 @@ struct Method {
     rename: Option<String>,
 }
 
+#[derive(Default, Debug, ParseAttributes)]
+#[deluxe(default, attributes(field))]
+struct Field {
+    skip: bool,
+    rename: Option<String>,
+}
+
+pub fn is_field_attr(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("field")
+}
+
 pub fn is_method_attr(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("method")
 }
 
 pub fn is_metamethod_attr(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("metamethod")
+}
+
+pub fn is_getter_attr(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("getter")
+}
+
+pub fn is_setter_attr(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("setter")
 }
 
 #[derive(Debug)]
@@ -196,12 +283,19 @@ pub struct UserDataMethod {
     pub kind: MethodKind,
 }
 impl UserDataMethod {
-    pub fn from_imp_fn(method: &ImplItemFn) -> Option<Self> {
+    pub fn from_impl_fn(method: &ImplItemFn) -> Option<Self> {
+        let field_attr = method
+            .attrs
+            .iter()
+            .find(|a| is_field_attr(a))
+            .map(|a| deluxe::parse_attributes::<_, Field>(a).unwrap_or_default());
+
         let method_attr = method
             .attrs
             .iter()
             .find(|a| is_method_attr(a))
             .map(|a| deluxe::parse_attributes::<_, Method>(a).unwrap_or_default());
+
         let metamethod_attr = match method
             .attrs
             .iter()
@@ -209,13 +303,43 @@ impl UserDataMethod {
         {
             Some(a) => match deluxe::parse_attributes::<_, MetaMethod>(a) {
                 Ok(v) => Some(v),
-                Err(err) => proc_macro_error::abort!(method.span(), "{}", err),
+                Err(err) => proc_macro_error::abort!(method, "{}", err),
             },
             None => None,
         };
 
-        if method_attr.is_some() && metamethod_attr.is_some() {
-            return None;
+        let getter_attr = match method
+            .attrs
+            .iter()
+            .find(|a| is_getter_attr(a)) 
+        {
+            Some(a) => match deluxe::parse_attributes::<_, Getter>(a) {
+                Ok(v) => Some(v),
+                Err(err) => proc_macro_error::abort!(method, "{}", err),
+            },
+            None => None
+        };
+
+        let setter_attr = match method
+            .attrs
+            .iter()
+            .find(|a| is_setter_attr(a))
+        {
+            Some(a) => match deluxe::parse_attributes::<_, Setter>(a) {
+                Ok(v) => Some(v),
+                Err(err) => proc_macro_error::abort!(method, "{}", err),
+            },
+            None => None
+        };
+
+        let matches = method_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + metamethod_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + getter_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + setter_attr.as_ref().map(|_| 1).unwrap_or_default()
+            + field_attr.as_ref().map(|_| 1).unwrap_or_default();
+
+        if matches > 1 { 
+            proc_macro_error::abort!(method.sig.ident, "method cannot be registered more than once");
         }
 
         let fn_name = method.sig.ident.clone();
@@ -223,9 +347,14 @@ impl UserDataMethod {
         let instance = PassBy::from_fn_arg(method.sig.inputs.first());
         let doc = doc_comment(&method.attrs);
 
-        let (lua_name, kind) = if let Some(Method { rename }) = method_attr {
+        let (lua_name, kind): (TokenStream, MethodKind) = if let Some(Method { rename }) = method_attr {
             let name = rename.unwrap_or_else(|| fn_name.to_string());
             (quote!(#name), MethodKind::Regular)
+        } else if let Some(Field { skip, rename }) = field_attr{
+            if skip { return None; }
+            let name = rename.unwrap_or_else(|| fn_name.to_string());
+            (quote!(#name), MethodKind::StaticField)
+            
         } else if let Some(MetaMethod(target)) = metamethod_attr {
             if (target.is_ident() && target == "Index") || (target == "__index") {
                 let replace = "__usr_index";
@@ -236,6 +365,10 @@ impl UserDataMethod {
             } else {
                 (quote!(#target), MethodKind::Meta)
             }
+        } else if let Some(Getter(field)) = getter_attr {
+            (quote!(#field), MethodKind::Getter)
+        } else if let Some(Setter(field)) = setter_attr {
+            (quote!(#field), MethodKind::Setter)
         } else {
             return None;
         };
@@ -247,6 +380,16 @@ impl UserDataMethod {
                     method.sig.asyncness,
                     "async metamethods are not supported by mlua"
                 );
+            }
+        }
+
+        if kind.is_static_field() {
+            if !method.sig.inputs.is_empty() {
+                proc_macro_error::abort!(method.sig.inputs[0], "expeced 0 arguments");
+            }
+
+            if let ReturnType::Default = method.sig.output {
+                proc_macro_error::abort!(method.sig.span(), "expeced return type");
             }
         }
 
@@ -275,6 +418,14 @@ impl UserDataMethod {
         if let Some(FnArg::Typed(pat_type)) = params_iter.peek() {
             if let Pat::Ident(PatIdent { ident, .. }) = &*pat_type.pat {
                 if ident == "lua" {
+                    // Validate whether Lua is passed by reference or not based on if the
+                    // method is registered as async. In mlua `async` method/function variants
+                    // pass `Lua` by value while all other methods/functions are pass by reference.
+                    match &*pat_type.ty {
+                        syn::Type::Reference(_) => if is_async { proc_macro_error::abort!(pat_type.ty, "cannot be a reference") },
+                        _  if !is_async => proc_macro_error::abort!(pat_type.ty, "must be a reference"),
+                        _ => ()
+                    }
                     has_lua = true;
                     params_iter.next();
                 }
@@ -378,7 +529,31 @@ pub enum Index {
     Int(isize),
     Str(String),
 }
+impl ParseMetaItem for Index {
+    fn parse_meta_item(input: syn::parse::ParseStream, _mode: deluxe::ParseMode) -> deluxe::Result<Self> {
+        let lit: Lit = input.parse()?;
+
+        match lit {
+            Lit::Int(int) => {
+                let val = int.base10_parse::<isize>()?;
+                Ok(Self::Int(val))
+            },
+            Lit::Str(s) => {
+                Ok(Self::Str(s.value()))
+            },
+            _ => Err(deluxe::Error::new(lit.span(), "Expected string or integer"))
+        }
+    }
+}
+
 impl Index {
+    pub fn as_int(&self) -> isize {
+        match self {
+            Self::Int(v) => *v,
+            Self::Str(_) => 0
+        }
+    }
+
     pub fn is_str(&self) -> bool {
         match self {
             Self::Str(_) => true,

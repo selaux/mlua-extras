@@ -1,9 +1,9 @@
 #![cfg(test)]
 
 use crate::typed::{
-    generator::{Definition, DefinitionBuilder, Definitions, Entry, DefinitionFileGenerator},
-    function::Return,
     Index, Param, Type, TypedClassBuilder,
+    function::Return,
+    generator::{Definition, DefinitionBuilder, DefinitionFileGenerator, Definitions, Entry},
 };
 
 /// Write definitions to a string buffer and return the output.
@@ -22,8 +22,15 @@ fn single(def: impl Into<Definition>) -> Definitions {
 }
 
 /// Helper: add a typed value entry to a DefinitionBuilder.
-fn with_value(mut builder: DefinitionBuilder, name: &str, ty: Type, doc: Option<&str>) -> DefinitionBuilder {
-    builder.entries.push(Entry::new_with(name, Type::Value(Box::new(ty)), doc));
+fn with_value(
+    mut builder: DefinitionBuilder,
+    name: &str,
+    ty: Type,
+    doc: Option<&str>,
+) -> DefinitionBuilder {
+    builder
+        .entries
+        .push(Entry::new_with(name, Type::Value(Box::new(ty)), doc));
     builder
 }
 
@@ -138,17 +145,15 @@ fn test_enum_single_variant() {
 
 #[test]
 fn test_enum_multiple_variants() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Direction",
-            Type::r#enum([
-                Type::literal("Up"),
-                Type::literal("Down"),
-                Type::literal("Left"),
-                Type::literal("Right"),
-            ]),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Direction",
+        Type::r#enum([
+            Type::literal("Up"),
+            Type::literal("Down"),
+            Type::literal("Left"),
+            Type::literal("Right"),
+        ]),
+    )));
     assert_eq!(
         out.trim(),
         r#"--- @meta
@@ -250,7 +255,11 @@ fn test_value_named_class_type() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Player",
-            Type::class(TypedClassBuilder::default().field("name", Type::string(), ())),
+            Type::class(
+                TypedClassBuilder::default()
+                    .field("name", Type::string(), ())
+                    .build(),
+            ),
         ),
         "player",
         Type::named("Player"),
@@ -383,7 +392,7 @@ function ["some.name"]() end"#
 #[test]
 fn test_class_empty() {
     let out = generate(single(
-        Definition::start().register_as("Empty", Type::class(TypedClassBuilder::default())),
+        Definition::start().register_as("Empty", Type::class(TypedClassBuilder::default().build())),
     ));
     assert_eq!(
         out.trim(),
@@ -401,7 +410,8 @@ fn test_class_with_fields() {
             Type::class(
                 TypedClassBuilder::default()
                     .field("name", Type::string(), ())
-                    .field("score", Type::integer(), ()),
+                    .field("score", Type::integer(), ())
+                    .build(),
             ),
         ),
     ));
@@ -422,7 +432,8 @@ fn test_class_field_with_doc() {
             "Player",
             Type::class(
                 TypedClassBuilder::default()
-                    .field("name", Type::string(), "The player's name"),
+                    .field("name", Type::string(), "The player's name")
+                    .build(),
             ),
         ),
     ));
@@ -439,11 +450,11 @@ fn test_class_field_with_doc() {
 #[test]
 fn test_class_doc_comments() {
     let mut builder = TypedClassBuilder::default();
-    builder.type_doc = Some("A class-level doc".into());
+    builder.typed_class.type_doc = Some("A class-level doc".into());
     let mut def_builder = Definition::start();
     def_builder.entries.push(Entry::new_with(
         "Documented",
-        Type::class(builder),
+        Type::class(builder.build()),
         Some("Top-level doc"),
     ));
     let out = generate(single(def_builder));
@@ -464,7 +475,8 @@ fn test_class_with_method_no_extra_params() {
             "Foo",
             Type::class(
                 TypedClassBuilder::default()
-                    .method::<(), String>("getValue", "Get the value"),
+                    .method::<(), String>("getValue", "Get the value")
+                    .build(),
             ),
         ),
     ));
@@ -474,10 +486,10 @@ fn test_class_with_method_no_extra_params() {
 
 --- @class Foo
 local _CLASS_Foo_ = {
-  --- Get the value
-  --- @param self Foo
-  --- @return string
-  getValue = function(self) end,
+\t--- Get the value
+\t--- @param self Foo
+\t--- @return string
+\tgetValue = function(self) end,
 }"
     );
 }
@@ -489,7 +501,8 @@ fn test_class_with_method_with_params() {
             "Counter",
             Type::class(
                 TypedClassBuilder::default()
-                    .method::<(i64,), ()>("add", ()),
+                    .method::<(i64,), ()>("add", ())
+                    .build(),
             ),
         ),
     ));
@@ -499,9 +512,9 @@ fn test_class_with_method_with_params() {
 
 --- @class Counter
 local _CLASS_Counter_ = {
-  --- @param self Counter
-  --- @param param1 integer
-  add = function(self, param1) end,
+\t--- @param self Counter
+\t--- @param param1 integer
+\tadd = function(self, param1) end,
 }"
     );
 }
@@ -513,7 +526,8 @@ fn test_class_with_static_function() {
             "Utils",
             Type::class(
                 TypedClassBuilder::default()
-                    .function::<String, i64>("create", "A factory"),
+                    .function::<String, i64>("create", "A factory")
+                    .build(),
             ),
         ),
     ));
@@ -523,10 +537,10 @@ fn test_class_with_static_function() {
 
 --- @class Utils
 local _CLASS_Utils_ = {
-  --- A factory
-  --- @param param1 string
-  --- @return integer
-  create = function(param1) end,
+\t--- A factory
+\t--- @param param1 string
+\t--- @return integer
+\tcreate = function(param1) end,
 }"
     );
 }
@@ -539,7 +553,8 @@ fn test_class_fields_and_methods_combined() {
             Type::class(
                 TypedClassBuilder::default()
                     .field("name", Type::string(), ())
-                    .method::<(), String>("getName", ()),
+                    .method::<(), String>("getName", ())
+                    .build(),
             ),
         ),
     ));
@@ -550,9 +565,9 @@ fn test_class_fields_and_methods_combined() {
 --- @class Player
 --- @field name string
 local _CLASS_Player_ = {
-  --- @param self Player
-  --- @return string
-  getName = function(self) end,
+\t--- @param self Player
+\t--- @return string
+\tgetName = function(self) end,
 }"
     );
 }
@@ -564,7 +579,8 @@ fn test_class_with_meta_field() {
             "Tracked",
             Type::class(
                 TypedClassBuilder::default()
-                    .meta_field("__count", Type::integer(), "Meta count"),
+                    .meta_field("__count", Type::integer(), "Meta count")
+                    .build(),
             ),
         ),
     ));
@@ -574,11 +590,11 @@ fn test_class_with_meta_field() {
 
 --- @class Tracked
 local _CLASS_Tracked_ = {
-  __metatable = {
-    --- Meta count
-    --- @type integer
-    __count = nil,
-  }
+\t__metatable = {
+\t\t--- Meta count
+\t\t--- @type integer
+\t\t__count = nil,
+\t}
 }"
     );
 }
@@ -591,7 +607,8 @@ fn test_class_with_meta_method() {
             Type::class(
                 TypedClassBuilder::default()
                     .field("x", Type::number(), ())
-                    .meta_method::<(), String>("__tostring", ()),
+                    .meta_method::<(), String>("__tostring", ())
+                    .build(),
             ),
         ),
     ));
@@ -602,11 +619,11 @@ fn test_class_with_meta_method() {
 --- @class Obj
 --- @field x number
 local _CLASS_Obj_ = {
-  __metatable = {
-    --- @param self Obj
-    --- @return string
-    __tostring = function(self) end,
-  }
+\t__metatable = {
+\t\t--- @param self Obj
+\t\t--- @return string
+\t\t__tostring = function(self) end,
+\t}
 }"
     );
 }
@@ -618,7 +635,8 @@ fn test_class_with_meta_function() {
             "Indexed",
             Type::class(
                 TypedClassBuilder::default()
-                    .meta_function::<(String,), String>("__index", ()),
+                    .meta_function::<(String,), String>("__index", ())
+                    .build(),
             ),
         ),
     ));
@@ -628,11 +646,11 @@ fn test_class_with_meta_function() {
 
 --- @class Indexed
 local _CLASS_Indexed_ = {
-  __metatable = {
-    --- @param param1 string
-    --- @return string
-    __index = function(param1) end,
-  }
+\t__metatable = {
+\t\t--- @param param1 string
+\t\t--- @return string
+\t\t__index = function(param1) end,
+\t}
 }"
     );
 }
@@ -646,7 +664,8 @@ fn test_type_sig_array() {
             "Names",
             Type::class(
                 TypedClassBuilder::default()
-                    .field("items", Type::array(Type::string()), ()),
+                    .field("items", Type::array(Type::string()), ())
+                    .build(),
             ),
         ),
     ));
@@ -666,7 +685,12 @@ fn test_type_sig_tuple() {
             "Pair",
             Type::class(
                 TypedClassBuilder::default()
-                    .field("coords", Type::tuple([Type::integer(), Type::integer()]), ()),
+                    .field(
+                        "coords",
+                        Type::tuple([Type::integer(), Type::integer()]),
+                        (),
+                    )
+                    .build(),
             ),
         ),
     ));
@@ -686,7 +710,8 @@ fn test_type_sig_map() {
             "Registry",
             Type::class(
                 TypedClassBuilder::default()
-                    .field("data", Type::map(Type::string(), Type::number()), ()),
+                    .field("data", Type::map(Type::string(), Type::number()), ())
+                    .build(),
             ),
         ),
     ));
@@ -705,14 +730,16 @@ fn test_type_sig_table() {
         Definition::start().register_as(
             "Config",
             Type::class(
-                TypedClassBuilder::default().field(
-                    "opts",
-                    Type::table([
-                        (Index::from("host"), Type::string()),
-                        (Index::from("port"), Type::integer()),
-                    ]),
-                    (),
-                ),
+                TypedClassBuilder::default()
+                    .field(
+                        "opts",
+                        Type::table([
+                            (Index::from("host"), Type::string()),
+                            (Index::from("port"), Type::integer()),
+                        ]),
+                        (),
+                    )
+                    .build(),
             ),
         ),
     ));
@@ -732,7 +759,8 @@ fn test_type_sig_union() {
             "Container",
             Type::class(
                 TypedClassBuilder::default()
-                    .field("value", Type::string() | Type::nil(), ()),
+                    .field("value", Type::string() | Type::nil(), ())
+                    .build(),
             ),
         ),
     ));
@@ -753,21 +781,23 @@ fn test_type_sig_function_inline() {
         Definition::start().register_as(
             "Handler",
             Type::class(
-                TypedClassBuilder::default().field(
-                    "callback",
-                    Type::Function {
-                        params: vec![Param {
-                            name: Some("x".into()),
-                            ty: Type::number(),
-                            doc: None,
-                        }],
-                        returns: vec![Return {
-                            ty: Type::boolean(),
-                            doc: None,
-                        }],
-                    },
-                    (),
-                ),
+                TypedClassBuilder::default()
+                    .field(
+                        "callback",
+                        Type::Function {
+                            params: vec![Param {
+                                name: Some("x".into()),
+                                ty: Type::number(),
+                                doc: None,
+                            }],
+                            returns: vec![Return {
+                                ty: Type::boolean(),
+                                doc: None,
+                            }],
+                        },
+                        (),
+                    )
+                    .build(),
             ),
         ),
     ));
@@ -790,7 +820,11 @@ fn test_type_sig_enum_cross_reference() {
             .register_as("Color", color_enum.clone())
             .register_as(
                 "Widget",
-                Type::class(TypedClassBuilder::default().field("color", color_enum, ())),
+                Type::class(
+                    TypedClassBuilder::default()
+                        .field("color", color_enum, ())
+                        .build(),
+                ),
             ),
     ));
     assert_eq!(
@@ -812,14 +846,19 @@ fn test_type_sig_class_cross_reference() {
     let vec2 = Type::class(
         TypedClassBuilder::default()
             .field("x", Type::number(), ())
-            .field("y", Type::number(), ()),
+            .field("y", Type::number(), ())
+            .build(),
     );
     let out = generate(single(
         Definition::start()
             .register_as("Vec2", vec2.clone())
             .register_as(
                 "Sprite",
-                Type::class(TypedClassBuilder::default().field("position", vec2, ())),
+                Type::class(
+                    TypedClassBuilder::default()
+                        .field("position", vec2, ())
+                        .build(),
+                ),
             ),
     ));
     assert_eq!(
@@ -889,8 +928,12 @@ fn test_luals_function_wrong_arg_type() {
     let log_dir = tempfile::TempDir::new().unwrap();
     let meta_dir = tempfile::TempDir::new().unwrap();
     std::fs::write(dir.path().join("defs.d.lua"), &out).unwrap();
-    std::fs::write(dir.path().join("test.lua"), "greet(42)
-").unwrap();
+    std::fs::write(
+        dir.path().join("test.lua"),
+        "greet(42)
+",
+    )
+    .unwrap();
     std::fs::write(
         dir.path().join(".luarc.json"),
         r#"{"workspace.library": ["./"]}"#,
@@ -937,7 +980,8 @@ fn test_luals_class_field_access() {
             Type::class(
                 TypedClassBuilder::default()
                     .field("name", Type::string(), ())
-                    .field("score", Type::integer(), ()),
+                    .field("score", Type::integer(), ())
+                    .build(),
             ),
         ),
         "player",
@@ -961,7 +1005,8 @@ fn test_luals_class_method_call() {
             "Player",
             Type::class(
                 TypedClassBuilder::default()
-                    .method::<(), String>("getName", ()),
+                    .method::<(), String>("getName", ())
+                    .build(),
             ),
         ),
         "player",
@@ -987,8 +1032,11 @@ fn test_luals_enum_valid_assignment() {
         Type::named("Direction"),
         None,
     )));
-    validate_with_lua_ls(&out, "local _d = dir
-");
+    validate_with_lua_ls(
+        &out,
+        "local _d = dir
+",
+    );
 }
 
 #[test]
@@ -1050,7 +1098,11 @@ fn test_luals_enum_referenced_in_class_field() {
             .register_as("Color", color_enum.clone())
             .register_as(
                 "Widget",
-                Type::class(TypedClassBuilder::default().field("color", color_enum, ())),
+                Type::class(
+                    TypedClassBuilder::default()
+                        .field("color", color_enum, ())
+                        .build(),
+                ),
             ),
         "widget",
         Type::named("Widget"),

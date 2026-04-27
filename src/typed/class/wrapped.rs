@@ -4,7 +4,6 @@ use mlua::{
 };
 #[cfg(feature = "async")]
 use mlua::{UserDataRef, UserDataRefMut};
-
 use crate::{MaybeSend, typed::IntoDocComment};
 
 use super::{Type, Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
@@ -143,11 +142,11 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         self
     }
 
-    fn index<I: Typed>(&mut self, _idx: usize, _doc: impl IntoDocComment) -> &mut Self {
+    fn index<I: Typed>(&mut self, _idx: isize, _doc: impl IntoDocComment) -> &mut Self {
         self
     }
 
-    fn index_as(&mut self, _idx: usize, _ty: impl Into<Type>, _doc: impl IntoDocComment) -> &mut Self {
+    fn index_as(&mut self, _idx: isize, _ty: impl Into<Type>, _doc: impl IntoDocComment) -> &mut Self {
         self
     }
 

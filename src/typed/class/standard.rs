@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 
 use crate::{
-    MaybeSend, typed::{Field, Func, Index, IntoDocComment, Type}
+    MaybeSend, ser::to_lua_repr, typed::{Field, Func, Index, IntoDocComment, StaticField, Type}
 };
 
 use super::{
@@ -11,20 +11,16 @@ use super::{
     TypedUserData,
 };
 
-/// Type information for a lua `class`. This happens to be a [`TypedUserData`]
 #[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct TypedClassBuilder {
+pub struct TypedClass {
     pub type_doc: Option<Cow<'static, str>>,
-    queued_doc: Option<Cow<'static, str>>,
-    queued_ty: Option<Type>,
-    queued_params: Vec<(Option<Type>, String, Option<Cow<'static, str>>)>,
-    queued_returns: Vec<(Option<Type>, Option<Cow<'static, str>>)>,
 
     pub derives: Vec<String>,
 
     pub fields: BTreeMap<Index, Field>,
-    pub static_fields: BTreeMap<Index, Field>,
+    pub static_fields: BTreeMap<Index, StaticField>,
     pub meta_fields: BTreeMap<Index, Field>,
+    pub static_meta_fields: BTreeMap<Index, StaticField>,
 
     pub methods: BTreeMap<Index, Func>,
     pub meta_methods: BTreeMap<Index, Func>,
@@ -32,10 +28,32 @@ pub struct TypedClassBuilder {
     pub functions: BTreeMap<Index, Func>,
     pub meta_functions: BTreeMap<Index, Func>,
 }
+impl TypedClass {
+    /// Check if any of there are any meta fields, functions, or methods present
+    pub fn is_meta_empty(&self) -> bool {
+        self.meta_fields.is_empty()
+            && self.static_meta_fields.is_empty()
+            && self.meta_functions.is_empty()
+            && self.meta_methods.is_empty()
+    }
+}
+
+/// Type information for a lua `class`. This happens to be a [`TypedUserData`]
+#[derive(Default, Debug, Clone)]
+pub struct TypedClassBuilder {
+    lua: Lua,
+
+    queued_doc: Option<Cow<'static, str>>,
+    queued_ty: Option<Type>,
+    queued_params: Vec<(Option<Type>, String, Option<Cow<'static, str>>)>,
+    queued_returns: Vec<(Option<Type>, Option<Cow<'static, str>>)>,
+
+    pub typed_class: TypedClass,
+}
 
 impl From<TypedClassBuilder> for Type {
     fn from(value: TypedClassBuilder) -> Self {
-        Type::Class(Box::new(value))
+        Type::Class(Box::new(value.typed_class))
     }
 }
 
@@ -48,41 +66,38 @@ impl TypedClassBuilder {
         tcb
     }
 
+    pub fn build(self) -> TypedClass {
+        self.typed_class
+    }
+
     /// Skip/Remove a field field from the class definition
     pub fn skip_field(mut self, idx: impl Into<Index>) -> Self {
-        self.fields.remove(&idx.into());
+        self.typed_class.fields.remove(&idx.into());
         self
     }
 
     /// Skip/Remove a method from the class definition
     pub fn skip_method(mut self, idx: impl Into<Index>) -> Self {
-        self.methods.remove(&idx.into());
+        self.typed_class.methods.remove(&idx.into());
         self
     }
 
     /// Skip/Remove a meta method from the class definition
     pub fn skip_meta_method(mut self, idx: impl Into<Index>) -> Self {
-        self.meta_methods.remove(&idx.into());
+        self.typed_class.meta_methods.remove(&idx.into());
         self
     }
 
     /// Skip/Remove a function from the class definition
     pub fn skip_function(mut self, idx: impl Into<Index>) -> Self {
-        self.functions.remove(&idx.into());
+        self.typed_class.functions.remove(&idx.into());
         self
     }
 
     /// Skip/Remove a meta function from the class definition
     pub fn skip_meta_function(mut self, idx: impl Into<Index>) -> Self {
-        self.meta_functions.remove(&idx.into());
+        self.typed_class.meta_functions.remove(&idx.into());
         self
-    }
-
-    /// Check if any of there are any meta fields, functions, or methods present
-    pub fn is_meta_empty(&self) -> bool {
-        self.meta_fields.is_empty()
-            && self.meta_functions.is_empty()
-            && self.meta_methods.is_empty()
     }
 
     /// Creates a new typed field and adds it to the class's type information
@@ -100,7 +115,27 @@ impl TypedClassBuilder {
     ///     .field("message", Type::string(), format!("A message for {NAME}"));
     /// ```
     pub fn field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
-        self.fields.insert(key.into(), Field::new(ty, doc));
+        self.typed_class.fields.insert(key.into(), Field::new(ty, doc));
+        self
+    }
+
+    pub fn static_field<V>(mut self, key: impl Into<Index>, value: V, doc: impl IntoDocComment) -> Self 
+    where
+        V: Typed + IntoLua
+    {
+        let value = match value.into_lua(&self.lua) {
+            Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
+            Err(err) => Err(err)
+        };
+
+        if let Ok(value) = value {
+            self.typed_class.static_fields.insert(key.into(), StaticField::new(V::ty(), doc, value));
+        }
+        self
+    }
+
+    pub fn inherit(mut self, parent: &TypedClass) -> Self {
+        self.typed_class.static_fields.extend(parent.static_fields.clone());
         self
     }
 
@@ -125,7 +160,7 @@ impl TypedClassBuilder {
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.functions.insert(
+        self.typed_class.functions.insert(
             key.into(),
             Func::new::<Params, Returns>(
                 doc,
@@ -160,7 +195,7 @@ impl TypedClassBuilder {
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.methods.insert(
+        self.typed_class.methods.insert(
             key.into(),
             Func::new::<Params, Returns>(
                 doc,
@@ -186,7 +221,7 @@ impl TypedClassBuilder {
     ///     .meta_field("message", Type::string(), format!("A message for {NAME}"));
     /// ```
     pub fn meta_field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
-        self.meta_fields.insert(key.into(), Field::new(ty, doc));
+        self.typed_class.meta_fields.insert(key.into(), Field::new(ty, doc));
         self
     }
 
@@ -211,7 +246,7 @@ impl TypedClassBuilder {
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.meta_functions.insert(
+        self.typed_class.meta_functions.insert(
             key.into(),
             Func::new::<Params, Returns>(
                 doc,
@@ -248,7 +283,7 @@ impl TypedClassBuilder {
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
     {
-        self.meta_methods.insert(
+        self.typed_class.meta_methods.insert(
             key.into(),
             Func::new::<Params, Returns>(
                 doc,
@@ -261,17 +296,17 @@ impl TypedClassBuilder {
 
     /// Add a child class that this class derives
     pub fn derive(mut self, parent: impl std::fmt::Display) -> Self {
-        self.derives.push(parent.to_string());
+        self.typed_class.derives.push(parent.to_string());
         self
     }
 }
 
 impl<T: TypedUserData> TypedDataDocumentation<T> for TypedClassBuilder {
     fn add(&mut self, doc: &str) -> &mut Self {
-        if let Some(type_doc) = self.type_doc.as_mut() {
+        if let Some(type_doc) = self.typed_class.type_doc.as_mut() {
             *type_doc = format!("{type_doc}\n{doc}").into()
         } else {
-            self.type_doc = Some(doc.to_string().into())
+            self.typed_class.type_doc = Some(doc.to_string().into())
         }
         self
     }
@@ -288,25 +323,30 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         self
     }
 
-    fn add_field<V>(&mut self, name: impl Into<String>, _: V)
+    fn add_field<V>(&mut self, name: impl Into<String>, value: V)
     where
         V: IntoLua + Clone + 'static + Typed,
     {
-        let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(V::as_param());
-        self.static_fields
-            .entry(name.into())
-            .and_modify({
-                let ty = ty.clone();
-                |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
-                    v.ty = v.ty.clone() | ty;
-                }
-            })
-            .or_insert(Field {
-                ty,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            });
+        let value = match value.into_lua(&self.lua) {
+            Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
+            Err(err) => Err(err)
+        };
+
+        if let Ok(value) = value {
+            let name: Cow<'static, str> = name.into().into();
+            let ty = self.queued_ty.take().unwrap_or(V::as_param());
+            let value: Cow<'static, str> = value.into();
+
+            self.typed_class.static_fields
+                .insert(
+                    name.into(),
+                    StaticField::new(
+                        ty,
+                        self.queued_doc.take(),
+                        value,
+                    )
+                );
+        }
     }
 
     fn add_field_function_set<S, A, F>(&mut self, name: S, _: F)
@@ -317,12 +357,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(A::as_param());
-        self.static_fields
+        self.typed_class.fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -340,12 +385,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(R::as_return());
-        self.static_fields
+        self.typed_class.fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -365,12 +415,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(A::as_param() | R::as_return());
-        self.static_fields
+        self.typed_class.fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -388,12 +443,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(A::as_param());
-        self.fields
+        self.typed_class.fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -411,12 +471,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(R::as_return());
-        self.fields
+        self.typed_class.fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -436,12 +501,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(A::as_param() | R::as_return());
-        self.fields
+        self.typed_class.fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -451,25 +521,30 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             });
     }
 
-    fn add_meta_field<V>(&mut self, meta: impl Into<String>, _: V)
+    fn add_meta_field<V>(&mut self, meta: impl Into<String>, value: V)
     where
         V: IntoLua + Typed + 'static,
     {
-        let name: Cow<'static, str> = meta.into().into();
-        let ty = self.queued_ty.take().unwrap_or(V::as_param());
-        self.meta_fields
-            .entry(name.into())
-            .and_modify({
-                let ty = ty.clone();
-                |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
-                    v.ty = v.ty.clone() | ty;
-                }
-            })
-            .or_insert(Field {
-                ty,
-                doc: self.queued_doc.take().map(|v| v.into()),
-            });
+        let value = match value.into_lua(&self.lua) {
+            Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
+            Err(err) => Err(err)
+        };
+
+        if let Ok(value) = value {
+            let name: Cow<'static, str> = meta.into().into();
+            let ty = self.queued_ty.take().unwrap_or(V::as_param());
+            let value: Cow<'static, str> = value.into();
+
+            self.typed_class.static_meta_fields
+                .insert(
+                    name.into(),
+                    StaticField::new(
+                        ty,
+                        self.queued_doc.take(),
+                        value,
+                    )
+                );
+        }
     }
 
     fn add_meta_field_with<R, F>(&mut self, meta: impl Into<String>, _: F)
@@ -479,12 +554,17 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
 
         let name: Cow<'static, str> = meta.into().into();
         let ty = self.queued_ty.take().unwrap_or(R::as_return());
-        self.meta_fields
+        self.typed_class.meta_fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
                 |v| {
-                    v.doc = self.queued_doc.take().map(|v| v.into());
+                    if let Some(doc) = self.queued_doc.take() {
+                        v.doc = Some(match v.doc.take() {
+                            Some(d) => format!("{d}\n{doc}").into(),
+                            None => doc
+                        });
+                    }
                     v.ty = v.ty.clone() | ty;
                 }
             })
@@ -524,13 +604,13 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         self
     }
 
-    fn index<I: Typed>(&mut self, idx: usize, doc: impl IntoDocComment) -> &mut Self {
-        self.fields.insert(idx.into(), Field { ty: I::as_param(), doc: doc.into_doc_comment() });
+    fn index<I: Typed>(&mut self, idx: isize, doc: impl IntoDocComment) -> &mut Self {
+        self.typed_class.fields.insert(idx.into(), Field { ty: I::as_param(), doc: doc.into_doc_comment() });
         self
     }
 
-    fn index_as(&mut self, idx: usize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
-        self.fields.insert(idx.into(), Field { ty: ty.into(), doc: doc.into_doc_comment() });
+    fn index_as(&mut self, idx: isize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
+        self.typed_class.fields.insert(idx.into(), Field { ty: ty.into(), doc: doc.into_doc_comment() });
         self
     }
 
@@ -542,7 +622,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.methods.insert(
+        self.typed_class.methods.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -560,7 +640,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.functions.insert(
+        self.typed_class.functions.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -578,7 +658,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.methods.insert(
+        self.typed_class.methods.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -595,7 +675,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         M: 'static + MaybeSend + Fn(&Lua, &T, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = meta.into().into();
-        self.meta_methods.insert(
+        self.typed_class.meta_methods.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -615,7 +695,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         R: IntoLuaMulti + TypedMultiValue,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.methods.insert(
+        self.typed_class.methods.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -635,7 +715,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         R: IntoLuaMulti + TypedMultiValue,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.methods.insert(
+        self.typed_class.methods.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -653,7 +733,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.functions.insert(
+        self.typed_class.functions.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -670,7 +750,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         F: 'static + MaybeSend + Fn(&Lua, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = meta.into().into();
-        self.meta_functions.insert(
+        self.typed_class.meta_functions.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -690,7 +770,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         FR: 'static + MaybeSend + std::future::Future<Output = mlua::Result<R>>,
     {
         let name: Cow<'static, str> = name.into().into();
-        self.functions.insert(
+        self.typed_class.functions.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -707,7 +787,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         M: 'static + MaybeSend + FnMut(&Lua, &mut T, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = meta.into().into();
-        self.meta_methods.insert(
+        self.typed_class.meta_methods.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),
@@ -724,7 +804,7 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         F: 'static + MaybeSend + FnMut(&Lua, A) -> mlua::Result<R>,
     {
         let name: Cow<'static, str> = meta.into().into();
-        self.meta_functions.insert(
+        self.typed_class.meta_functions.insert(
             name.into(),
             Func::new::<A, R>(
                 self.queued_doc.take(),

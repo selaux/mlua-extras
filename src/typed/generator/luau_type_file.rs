@@ -128,18 +128,9 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     }
                     writeln!(buffer)?;
 
-                    // Static fields
-                    for (name, field) in type_data.static_fields.iter() {
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[field.doc.as_deref()],
-                            "\t",
-                        )?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
-                    }
-
                     // Instance fields
                     for (name, field) in type_data.fields.iter() {
+                        if name.is_int() { continue; }
                         self.write_doc_comments(
                             &mut buffer,
                             &[field.doc.as_deref()],
@@ -243,9 +234,19 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         )?;
                     }
 
-                    if !static_fns.is_empty() {
+                    if !static_fns.is_empty() || !type_data.static_fields.is_empty() {
                         writeln!(buffer)?;
                         writeln!(buffer, "declare {}: {{", definition.name)?;
+
+                        for (name, field) in type_data.static_fields.iter() {
+                            self.write_doc_comments(
+                                &mut buffer,
+                                &[field.inner.doc.as_deref()],
+                                "\t",
+                            )?;
+                            writeln!(buffer, "\t{}: {},", name, self.type_signature(&field.inner.ty)?)?;
+                        }
+
                         for (name, _func) in &static_fns {
                             writeln!(
                                 buffer,
@@ -345,10 +346,17 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                 }
             },
             Type::Single(value) => {
-                // Luau recognizes `integer` as a type, but numeric literals
-                // are inferred as `number` and the two are mutually incompatible,
-                // making `integer` unusable in practice. Emit `number` instead.
-                if value == "integer" { "number".to_string() } else { value.to_string() }
+                match value.as_ref() {
+                    // Luau has `userdata` but it isn't an actual type but instead
+                    // defined luau class types. This will erase the generic userdata
+                    // types to `any`.
+                    "userdata" | "lightuserdata" => "any".into(),
+                    // Luau recognizes `integer` as a type, but numeric literals
+                    // are inferred as `number` and the two are mutually incompatible,
+                    // making `integer` unusable in practice. Emit `number` instead.
+                    "integer" => "number".to_string(),
+                    other => other.to_string(),
+                }
             }
             Type::Tuple(types) => {
                 // Luau doesn't support integer literal keys in table types.
@@ -467,7 +475,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
     ) -> mlua::Result<()> {
         for doc in docs.iter().filter_map(|v| *v) {
             for line in doc.split('\n') {
-                writeln!(buffer, "{indent}--- {line}")?;
+                writeln!(buffer, "{indent}-- {line}")?;
             }
         }
         Ok(())
@@ -480,7 +488,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
         indent: &str,
     ) -> mlua::Result<()> {
         for (i, p) in params.iter().enumerate().filter(|(_, p)| p.doc.is_some()) {
-            write!(buffer, "{indent}--- @param {} {}",
+            write!(buffer, "{indent}-- @param {} {}",
                 p.name.as_deref().map(|v| v.to_string()).unwrap_or_else(|| format!("param{}", i + 1)),
                 self.type_signature(&p.ty)?
             )?;
@@ -500,7 +508,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
         indent: &str,
     ) -> mlua::Result<()> {
         for (i, r) in returns.iter().enumerate().filter(|(_, r)| r.doc.is_some()) {
-            write!(buffer, "{indent}--- @return {}", self.type_signature(&r.ty)?)?;
+            write!(buffer, "{indent}-- @return {}", self.type_signature(&r.ty)?)?;
             if let Some(doc) = r.doc.as_deref() {
                 let doc = doc.replace('\n', "");
                 write!(buffer, " -- #{} {doc}", i + 1)?;
