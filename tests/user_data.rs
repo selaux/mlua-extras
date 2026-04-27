@@ -1,4 +1,4 @@
-#![cfg(all(feature = "mlua", feature = "derive"))]
+#![cfg(all(feature = "mlua", feature = "macros"))]
 
 use mlua::{AnyUserData, FromLua};
 use mlua_extras::{

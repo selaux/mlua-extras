@@ -1,4 +1,4 @@
-#![cfg(all(feature = "mlua", feature = "derive"))]
+#![cfg(all(feature = "mlua", feature = "macros"))]
 
 use mlua::{FromLua, MetaMethod, UserData, Value};
 use mlua_extras::{
@@ -64,6 +64,29 @@ impl TypedUserData for TestOption {
                 })
             },
         );
+        
+        #[cfg(feature="userdata-wrappers")]
+        methods.add_function(
+            "func_returns_arc_self",
+            |_, ()| -> mlua::Result<std::sync::Arc<Self>> { Ok(Default::default()) },
+        );
+        #[cfg(feature="userdata-wrappers")]
+        methods.add_function(
+            "func_returns_arc_mutex_self",
+            |_, ()| -> mlua::Result<std::sync::Arc<std::sync::Mutex<Self>>> { Ok(Default::default()) },
+        );
+
+        #[cfg(feature="userdata-wrappers")]
+        methods.add_function(
+            "func_returns_rc_refcell_self",
+            |_, ()| -> mlua::Result<std::rc::Rc<Self>> { Ok(Default::default()) },
+        );
+        #[cfg(feature="userdata-wrappers")]
+        methods.add_function(
+            "func_returns_rc_refcell_self",
+            |_, ()| -> mlua::Result<std::rc::Rc<std::cell::RefCell<Self>>> { Ok(Default::default()) },
+        );
+
 
         methods.add_method("clone", |_, this, ()| Ok(this.clone()));
         methods.add_method(

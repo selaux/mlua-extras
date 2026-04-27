@@ -265,7 +265,7 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "async", feature = "derive"))]
+#[cfg(all(feature = "async", feature = "macros"))]
 mod tests {
     use super::*;
     use crate as mlua_extras;

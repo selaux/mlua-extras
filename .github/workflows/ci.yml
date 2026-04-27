@@ -25,16 +25,18 @@ jobs:
           - lua54,vendored
           - lua54,vendored,send
           - lua54,vendored,async
-          - lua54,vendored,derive
+          - lua54,vendored,macros
+          - lua54,vendored,macros,userdata-wrappers
           - lua54,vendored,send,async
-          - lua54,vendored,send,derive
-          - lua54,vendored,async,derive
-          - lua54,vendored,send,async,derive
-          # Full feature set including serialize and macros
-          - lua54,vendored,send,async,derive,serialize,macros
+          - lua54,vendored,send,macros
+          - lua54,vendored,async,macros
+          - lua54,vendored,send,async,macros
+          # Full feature set including serde and macros
+          - lua54,vendored,send,async,serde,macros
           # Luau feature combinations
           - luau,vendored
-          - luau,vendored,send,async,derive,serialize,macros
+          - luau,vendored,macros,userdata-wrappers
+          - luau,vendored,send,async,serde,macros
     steps:
       - uses: actions/checkout@v6
 

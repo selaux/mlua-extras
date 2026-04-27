@@ -11,23 +11,23 @@ repository = "https://github.com/Tired-Fox/mlua-extras"
 keywords = ["lua", "mlua", "luajit", "luau", "scripting"]
 
 [package.metadata.docs.rs]
-features = ["mlua", "lua54", "send", "async", "derive", "vendored"]
+features = ["mlua", "lua54", "send", "async", "macros", "vendored"]
 
 [features]
 mlua = ["dep:mlua"]
-lua54 = ["mlua/lua54", "mlua"]
-lua53 = ["mlua/lua53", "mlua"]
-lua52 = ["mlua/lua52", "mlua"]
-lua51 = ["mlua/lua51", "mlua"]
-luajit = ["mlua/luajit", "mlua"]
-luau = ["mlua/luau", "mlua"]
-vendored = ["mlua/vendored", "mlua"]
-serialize = ["mlua/serialize", "mlua"]
-macros = ["mlua/macros", "mlua"]
-module = ["mlua/module", "mlua"]
-send = ["mlua/send", "mlua"]
-async = ["mlua/async", "mlua"]
-derive = ["dep:mlua-extras-derive"]
+lua54 = ["mlua", "mlua/lua54"]
+lua53 = ["mlua", "mlua/lua53"]
+lua52 = ["mlua", "mlua/lua52"]
+lua51 = ["mlua", "mlua/lua51"]
+luajit = ["mlua", "mlua/luajit"]
+luau = ["mlua", "mlua/luau"]
+vendored = ["mlua/vendored"]
+serde = ["mlua/serde"]
+macros = ["mlua/macros", "dep:mlua-extras-derive"]
+module = ["mlua/module"]
+send = ["mlua/send"]
+async = ["mlua/async"]
+userdata-wrappers = ["mlua/userdata-wrappers"]
 
 [dev-dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
@@ -42,7 +42,7 @@ strum = { version = "0.27.2", features = ["derive"], default-features = false }
 
 [[example]]
 name = "macros"
-required-features = ["mlua", "derive"]
+required-features = ["mlua", "macros"]
 
 [[example]]
 name = "enum_and_tuple"
@@ -54,4 +54,4 @@ required-features = ["mlua"]
 
 [[example]]
 name = "typed"
-required-features = ["mlua", "derive", "serialize"]
+required-features = ["mlua", "macros", "serde"]
